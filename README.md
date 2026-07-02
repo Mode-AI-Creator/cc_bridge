@@ -2,11 +2,9 @@
 
 > A local command center for all your concurrent Claude Code sessions — discover them, watch them, and talk to them, from one dashboard.
 
-功能对标 [cldctrl](https://github.com/RyanSeanPhillips/cldctrl)（自动发现 / token·成本 / resume / 工具监控），展现对标 [paperclip](https://github.com/paperclipai/paperclip) 的「指挥中心」隐喻。完整路线图见 [PLAN.md](./PLAN.md)。
-
 ---
 
-## 为什么写这个
+## Why cc_bridge
 
 如果你像我一样，同时开着五六个 Claude Code 会话——一个跑重构、一个查 bug、一个写文档——那你大概也受够了在一堆终端窗口之间来回 `Alt+Tab`，猜哪个还在跑、哪个在等你、这个月又烧了多少 token。
 
@@ -29,20 +27,20 @@ ccbridge 干两件事：
 ## 架构
 
 ```
-   ~/.claude/projects/**/*.jsonl
-              │  (历史全量 + notify 增量)
-              ▼
-┌─────────────────────────────────────────────┐        ┌───────────────────────────┐
-│  ccbridge daemon  (Rust · tokio · axum)       │        │  Web 前端 (React · Vite)   │
-│                                               │        │                           │
-│  discovery   扫描会话文件                      │        │  SessionList  中间看板     │
-│  parser      容错 JSONL 解析 → usage/工具/消息 │  HTTP  │  TaskBar      项目树       │
-│  store       内存聚合 + 5h/7d 滚动成本 + 统计  │◀──────▶│  ChatPane     多终端标签   │
-│  cost        内置模型价格表                    │   +    │  TerminalView xterm + WS   │
-│  watcher     notify 文件监听 → WS 广播         │   WS   │  DetailPane   token/工具流 │
-│  supervisor  PTY 托管 (portable-pty/ConPTY)    │        │  StatsBar     全局统计     │
-│  api         /api/* + /ws + /api/pty/:id       │        │  NewSessionModal 目录选择  │
-└─────────────────────────────────────────────┘        └───────────────────────────┘
+        ~/.claude/projects/**/*.jsonl
+                 |  (full history + notify incremental)
+                 v
++-----------------------------------------------+        +-------------------------------+
+| ccbridge daemon  (Rust / tokio / axum)        |        | Web frontend (React / Vite)   |
+|                                               |        |                               |
+| discovery   scan session files                |        | SessionList    session board  |
+| parser      tolerant JSONL -> usage           |  HTTP  | TaskBar        project tree   |
+| store       in-mem aggregate + stats          |   +    | ChatPane       terminal tabs  |
+| cost        built-in price table              |  <-->  | TerminalView   xterm + WS     |
+| watcher     notify -> WS broadcast            |   WS   | DetailPane     tokens / tools |
+| supervisor  PTY hosting (portable-pty)        |        | StatsBar       global stats   |
+| api         /api/* + /ws + /api/pty/:id       |        | NewSessionModal  dir picker   |
++-----------------------------------------------+        +-------------------------------+
 ```
 
 **Rust workspace**
