@@ -1,0 +1,28 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Node / 前端
+web/node_modules
+web/dist
+node_modules
+
+# 工具产物
+.playwright-mcp/
+/ccbridge-*.png
+*.log
+
+# 机密 / 隐私（永不提交）
+.env
+.env.*
+*.env
+**/secrets.*
+*.pem
+*.key
+.claude/settings.local.json
+.claude/**/*.local.json
+
+# 编辑器/系统
+.DS_Store
+.idea/
+.vscode/
