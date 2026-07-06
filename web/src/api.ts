@@ -4,8 +4,11 @@ import type {
   Stats,
   SessionStatus,
   ManagedInfo,
+  InboxMessage,
 } from './types';
 import type { DiskTheme } from './lib/skins';
+
+export const OPERATOR = 'operator';
 
 async function json<T>(url: string): Promise<T> {
   const r = await fetch(url);
@@ -21,6 +24,32 @@ export const getDetail = (id: string) =>
 export const getThemes = () => json<DiskTheme[]>('/api/themes');
 
 export const getManaged = () => json<ManagedInfo[]>('/api/managed');
+
+// 信箱（Phase 6）
+export const getInbox = (session: string, unread = false) =>
+  json<InboxMessage[]>(
+    `/api/inbox/${encodeURIComponent(session)}?unread=${unread ? 1 : 0}`,
+  );
+
+export async function sendInbox(
+  to: string,
+  body: string,
+  urgent = false,
+  from = OPERATOR,
+): Promise<void> {
+  const r = await fetch('/api/inbox/send', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ from, to, body, urgent }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+}
+
+export const markInboxRead = (session: string, msgId: string) =>
+  fetch(
+    `/api/inbox/${encodeURIComponent(session)}/read/${encodeURIComponent(msgId)}`,
+    { method: 'POST' },
+  );
 
 export const killManaged = (id: string) =>
   fetch('/api/managed/' + encodeURIComponent(id) + '/kill', { method: 'POST' });
@@ -57,6 +86,7 @@ export async function uploadThemeAsset(
 export function connectWs(
   onUpdate: () => void,
   onHook?: (payload: Record<string, unknown>) => void,
+  onInbox?: () => void,
 ): () => void {
   let ws: WebSocket | null = null;
   let closed = false;
@@ -72,6 +102,7 @@ export function connectWs(
         // 文件变更或 hook 事件都触发刷新（hook → 实时精确状态）
         if (m.type === 'update' || m.type === 'hook') onUpdate();
         if (m.type === 'hook') onHook?.(m);
+        if (m.type === 'inbox') onInbox?.();
       } catch {
         /* ignore */
       }

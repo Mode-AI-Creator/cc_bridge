@@ -6,9 +6,14 @@ import {
   getThemes,
   getManaged,
   killManaged,
+  getInbox,
+  sendInbox,
+  markInboxRead,
   connectWs,
+  OPERATOR,
 } from './api';
-import type { ManagedInfo } from './types';
+import type { ManagedInfo, InboxMessage } from './types';
+import { InboxPanel } from './components/InboxPanel';
 import { type DiskTheme, loadSkin, saveSkin } from './lib/skins';
 import { StatsBar } from './components/StatsBar';
 import { TaskBar } from './components/TaskBar';
@@ -25,6 +30,7 @@ import {
   saveBuckets,
 } from './lib/classify';
 import { type ActionEvent, pushAction } from './lib/actions';
+import { unreadCount as countUnread } from './lib/inbox';
 
 // 记住上次新建会话的目录（跨平台，空则从驱动器/根开始浏览）
 const loadLastCwd = () => localStorage.getItem('ccbridge.lastCwd') || '';
@@ -96,6 +102,9 @@ export function App() {
   const [tab, setTab] = useState<Bucket>('active');
   const [actions, setActions] = useState<Record<string, ActionEvent[]>>({});
   const [managed, setManaged] = useState<ManagedInfo[]>([]);
+  const [connected, setConnected] = useState(true);
+  const [inbox, setInbox] = useState<InboxMessage[]>([]);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [skin, setSkin] = useState<string>(loadSkin);
   const [themes, setThemes] = useState<DiskTheme[]>([]);
   const [themeVersion, setThemeVersion] = useState(0);
@@ -112,6 +121,16 @@ export function App() {
   const pickSkin = (name: string) => {
     setSkin(name);
     saveSkin(name);
+  };
+
+  const unreadCount = countUnread(inbox);
+  const sendMsg = (to: string, body: string, urgent: boolean) => {
+    sendInbox(to, body, urgent)
+      .then(loadInbox)
+      .catch((e) => window.alert('发送失败: ' + e));
+  };
+  const markRead = (id: string) => {
+    markInboxRead(OPERATOR, id).then(loadInbox).catch(() => {});
   };
   const [lastCwd, setLastCwd] = useState(loadLastCwd);
 
@@ -130,8 +149,18 @@ export function App() {
       return n;
     });
 
+  const loadInbox = () => {
+    getInbox(OPERATOR).then(setInbox).catch(() => {});
+  };
+
   const load = () => {
-    getSessions().then(setSessions).catch(() => {});
+    // getSessions 作为连通性信号：成功→connected，失败→断线横幅
+    getSessions()
+      .then((s) => {
+        setSessions(s);
+        setConnected(true);
+      })
+      .catch(() => setConnected(false));
     getStats().then(setStats).catch(() => {});
     getManaged()
       .then((m) => setManaged(m.filter((x) => x.alive)))
@@ -140,9 +169,12 @@ export function App() {
 
   useEffect(() => {
     load();
+    loadInbox();
     reloadThemes();
-    const stop = connectWs(load, (p) =>
-      setActions((a) => pushAction(a, p as never)),
+    const stop = connectWs(
+      load,
+      (p) => setActions((a) => pushAction(a, p as never)),
+      loadInbox,
     );
     const iv = setInterval(load, 5000);
     return () => {
@@ -290,7 +322,20 @@ export function App() {
         onToggleTaskbar={() => setTaskbarCollapsed((c) => !c)}
         skipPerms={skipPerms}
         onToggleSkip={toggleSkip}
+        connected={connected}
+        unreadCount={unreadCount}
+        onOpenInbox={() => setInboxOpen((v) => !v)}
       />
+      {inboxOpen && (
+        <InboxPanel
+          messages={inbox}
+          sessions={sessions}
+          renames={renames}
+          onSend={sendMsg}
+          onMarkRead={markRead}
+          onClose={() => setInboxOpen(false)}
+        />
+      )}
       <div className="workspace" style={workspaceVars}>
         {!taskbarCollapsed && (
           <>

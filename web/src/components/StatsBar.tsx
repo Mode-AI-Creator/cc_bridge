@@ -15,6 +15,9 @@ export function StatsBar({
   onToggleTaskbar,
   skipPerms,
   onToggleSkip,
+  connected,
+  unreadCount,
+  onOpenInbox,
 }: {
   stats: Stats | null;
   onNewSession: () => void;
@@ -22,6 +25,9 @@ export function StatsBar({
   onToggleTaskbar: () => void;
   skipPerms: boolean;
   onToggleSkip: () => void;
+  connected: boolean;
+  unreadCount: number;
+  onOpenInbox: () => void;
 }) {
   const sc = stats?.status_counts;
   return (
@@ -79,6 +85,15 @@ export function StatsBar({
       )}
 
       <div className="spacer" />
+      {!connected && (
+        <span className="conn-pill" title="无法连接 daemon (127.0.0.1:7878)">
+          ● 未连接
+        </span>
+      )}
+      <button className="icon-btn inbox-btn" onClick={onOpenInbox} title="消息总线">
+        ✉
+        {unreadCount > 0 && <span className="inbox-badge">{unreadCount}</span>}
+      </button>
       <label
         className={`skip-toggle ${skipPerms ? 'on' : ''}`}
         title="新建/继续对话时加 --dangerously-skip-permissions（跳过所有权限确认，谨慎使用）"

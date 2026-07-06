@@ -50,6 +50,16 @@ export interface SessionDetail extends SessionSummary {
   ticks: UsageTick[];
 }
 
+export interface InboxMessage {
+  id: string;
+  from: string;
+  to: string;
+  body: string;
+  created_at: number;
+  read_at: number | null;
+  urgent: boolean;
+}
+
 export interface ManagedInfo {
   id: string;
   cwd: string;
