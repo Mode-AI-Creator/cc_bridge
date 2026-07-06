@@ -1,5 +1,6 @@
 //! ccbridge daemon：发现 + 解析 + 监控本地 Claude Code 会话，提供 HTTP/WS API。
 mod api;
+mod config;
 mod error;
 mod hooks_config;
 mod store;
@@ -55,15 +56,17 @@ async fn main() -> anyhow::Result<()> {
     watcher::spawn_watcher(projects.clone(), store.clone(), tx.clone());
 
     let sup = Arc::new(supervisor::Supervisor::new());
+    let config = Arc::new(config::Config::load());
 
+    let addr = config.server.addr.clone();
     let state = api::AppState {
         store: store.clone(),
         tx: tx.clone(),
         sup,
+        config,
     };
     let app = api::with_static(api::router(state));
 
-    let addr = std::env::var("CCBRIDGE_ADDR").unwrap_or_else(|_| "127.0.0.1:7878".to_string());
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("ccbridge daemon 已启动 → http://{}", addr);
     axum::serve(listener, app).await?;

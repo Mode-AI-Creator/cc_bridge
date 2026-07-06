@@ -1,0 +1,11 @@
+# ccbridge 配置示例
+# 复制到 ~/.claude/ccbridge/config.toml 后按需修改。
+# 优先级：环境变量 > 此文件 > 内置默认。
+
+[server]
+# 监听地址（默认仅本机，切勿暴露公网）。env 覆盖：CCBRIDGE_ADDR
+addr = "127.0.0.1:7878"
+
+[claude]
+# claude 可执行文件名或完整路径。env 覆盖：CCBRIDGE_CLAUDE
+program = "claude"

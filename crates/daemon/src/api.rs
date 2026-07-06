@@ -23,6 +23,7 @@ pub struct AppState {
     pub store: Arc<RwLock<Store>>,
     pub tx: broadcast::Sender<String>,
     pub sup: Arc<Supervisor>,
+    pub config: Arc<crate::config::Config>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -165,7 +166,7 @@ async fn list_managed(State(s): State<AppState>) -> impl IntoResponse {
 }
 
 async fn spawn_session(State(s): State<AppState>, Json(req): Json<SpawnReq>) -> impl IntoResponse {
-    let program = std::env::var("CCBRIDGE_CLAUDE").unwrap_or_else(|_| "claude".to_string());
+    let program = s.config.claude.program.clone();
     let mut args: Vec<String> = Vec::new();
     if req.skip_permissions {
         args.push("--dangerously-skip-permissions".to_string());
@@ -413,6 +414,7 @@ mod tests {
             store,
             tx,
             sup: Arc::new(Supervisor::new()),
+            config: Arc::new(crate::config::Config::default()),
         }
     }
 
