@@ -59,19 +59,27 @@ pub fn router(state: AppState) -> Router {
         .layer(CorsLayer::permissive())
 }
 
-/// 若找到 web/dist 则挂载静态前端（SPA fallback 到 index.html）。
+/// 挂载静态前端：embed-frontend 特性下用内嵌资源，否则找磁盘 web/dist（SPA fallback）。
 pub fn with_static(app: Router) -> Router {
-    use tower_http::services::{ServeDir, ServeFile};
-    for cand in ["web/dist", "../../web/dist", "../web/dist"] {
-        if std::path::Path::new(cand).exists() {
-            let serve =
-                ServeDir::new(cand).not_found_service(ServeFile::new(format!("{cand}/index.html")));
-            tracing::info!("静态前端目录: {}", cand);
-            return app.fallback_service(serve);
-        }
+    #[cfg(feature = "embed-frontend")]
+    {
+        tracing::info!("前端: 内嵌资源（单二进制）");
+        return app.fallback(crate::embed::serve);
     }
-    tracing::warn!("未找到 web/dist，仅提供 API（前端请用 `npm run dev`）");
-    app
+    #[cfg(not(feature = "embed-frontend"))]
+    {
+        use tower_http::services::{ServeDir, ServeFile};
+        for cand in ["web/dist", "../../web/dist", "../web/dist"] {
+            if std::path::Path::new(cand).exists() {
+                let serve = ServeDir::new(cand)
+                    .not_found_service(ServeFile::new(format!("{cand}/index.html")));
+                tracing::info!("静态前端目录: {}", cand);
+                return app.fallback_service(serve);
+            }
+        }
+        tracing::warn!("未找到 web/dist，仅提供 API（前端请用 `npm run dev`）");
+        app
+    }
 }
 
 // ---------- 观测（JSONL 发现） ----------

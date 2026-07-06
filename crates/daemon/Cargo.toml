@@ -27,6 +27,12 @@ base64 = "0.22"
 toml = "0.8"
 rusqlite = { version = "0.31", features = ["bundled"] }
 ureq = { version = "2", default-features = false, features = ["json"] }
+rust-embed = { version = "8", optional = true }
+mime_guess = { version = "2", optional = true }
+
+[features]
+# 发布构建：把 web/dist 内嵌进二进制，产出自包含单文件（先 npm run build）。
+embed-frontend = ["dep:rust-embed", "dep:mime_guess"]
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

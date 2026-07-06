@@ -106,23 +106,43 @@ cd web && npm run dev      # http://127.0.0.1:5173，自动把 /api、/ws、/api
 
 > Windows 提示：若 `cargo` 不在 PATH，用完整路径 `& "$env:USERPROFILE\.cargo\bin\cargo.exe" run -p ccbridge-daemon`，或把 `~/.cargo/bin` 加入 PATH。
 
-## 路线图
+### 自包含单二进制（发布用）
 
-MVP（可观测性）+ PTY 托管交互已完成。后续见 [PLAN.md](./PLAN.md)：
+```bash
+cd web && npm run build
+cargo build -p ccbridge-daemon --release --features embed-frontend
+# → target/release/ccbridge：前端已内嵌，拷到任意位置直接运行
+```
 
-- **Phase 3** CC hook 集成：精确实时状态 + session↔pane 映射 + 自动配置器
-- **Phase 4** dashboard 信息架构：active/inactive/history 分类 + 持久化
-- **Phase 5** 像素风实时动作流视图
-- **Phase 6** 异步信箱 + MCP server：让不同窗口的 agent 互相通信
-- **Phase 7** 轻量 TUI（ratatui，cldctrl 式终端交互）
-- **Phase 8** 打包（单二进制内嵌前端）
+### 精确实时状态 + 跨会话通信
+
+```bash
+ccbridge install-hooks     # 注入 CC hook（精确状态）+ MCP server（agent 互通）
+```
+
+装完新开的 CC 会话即生效。详见 **[docs/USAGE.md](./docs/USAGE.md)**。
+
+## 零遥测 · 全本地
+
+不上报任何数据、不连任何云。仅绑 `127.0.0.1`，会话数据来自本机 `~/.claude/projects`，状态存本机 SQLite。**切勿把监听地址改到公网** —— 见 [SECURITY.md](./SECURITY.md)。
+
+## 文档
+
+- [docs/USAGE.md](./docs/USAGE.md) — 配置、hooks、MCP/信箱、换肤、故障排查
+- [SECURITY.md](./SECURITY.md) — 威胁模型与本地信任边界
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — 开发与自检
+- [CHANGELOG.md](./CHANGELOG.md) · [PLAN.md](./PLAN.md) — 变更与路线图
+
+## 进度
+
+MVP + PTY 托管 + Phase 3（hook）+ Phase 4（三态看板）+ Phase 5（像素吉祥物/换肤）+ Phase 6（信箱 + MCP）已完成，正朝 1.0 硬化（持久化 / 配置 / CI / 打包）推进。1.0 之后：Phase 7 轻量 TUI（ratatui）、远程 SSH。详见 [PLAN.md](./PLAN.md) §6.6/6.7。
 
 ## 已知局限
 
-- 无 hook 时，状态（working/waiting/idle）按活动时间启发式推断；精确状态待 Phase 3。
-- 数据为内存聚合，daemon 重启后全量重扫；SQLite 持久化为后续项。
-- 仅本地会话；tmux / 远程 SSH 能力见 PLAN.md Phase 4。
-- 文件系统浏览接口仅供本地单用户使用，daemon 只绑 `127.0.0.1`——不要暴露到公网。
+- 无 hook 时状态按活动时间启发式推断；装 hook 后精确到工具级。
+- 会话缓存派生自 JSONL（重启重扫）；信箱/笔记已 SQLite 持久化。
+- 仅本地会话；远程 SSH 见 PLAN.md（1.0 后）。
+- 文件系统浏览 / 进程启动 / 终端注入等接口仅供本地单用户，只绑 `127.0.0.1`——不要暴露公网。
 
 ## License
 
