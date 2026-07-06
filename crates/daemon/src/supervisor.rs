@@ -75,11 +75,14 @@ impl Supervisor {
             pixel_height: 0,
         })?;
 
+        // 先定 id，注入 CCBRIDGE_SESSION 供会话内 MCP server 识别自身身份
+        let id = gen_id();
         let mut cmd = CommandBuilder::new(program);
         for a in args {
             cmd.arg(a);
         }
         cmd.cwd(cwd);
+        cmd.env("CCBRIDGE_SESSION", &id);
 
         let child = pair.slave.spawn_command(cmd)?;
         drop(pair.slave);
@@ -88,7 +91,6 @@ impl Supervisor {
         let writer = pair.master.take_writer()?;
         let (tx, _) = broadcast::channel::<Vec<u8>>(512);
 
-        let id = gen_id();
         let session = Arc::new(ManagedSession {
             id: id.clone(),
             cwd: cwd.to_string(),

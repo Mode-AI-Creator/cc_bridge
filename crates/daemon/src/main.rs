@@ -4,6 +4,7 @@ mod config;
 mod error;
 mod hooks_config;
 mod mailbox;
+mod mcp;
 mod store;
 mod supervisor;
 mod themes;
@@ -19,12 +20,14 @@ async fn main() -> anyhow::Result<()> {
     match arg1.as_deref() {
         Some("install-hooks") => return hooks_config::install(),
         Some("uninstall-hooks") => return hooks_config::uninstall(),
+        Some("mcp") => return mcp::run(),
         Some("--help") | Some("-h") => {
             println!("ccbridge — 本地 Claude Code 会话指挥中心");
             println!("用法:");
             println!("  ccbridge                 启动 daemon (默认 127.0.0.1:7878)");
-            println!("  ccbridge install-hooks   注入 CC hook 以获取精确实时状态");
-            println!("  ccbridge uninstall-hooks 移除已注入的 hook");
+            println!("  ccbridge install-hooks   注入 CC hook + MCP server 到 settings.json");
+            println!("  ccbridge uninstall-hooks 移除已注入的 hook 与 MCP server");
+            println!("  ccbridge mcp             作为 MCP server 运行 (stdio，供 CC 调用)");
             return Ok(());
         }
         _ => {}

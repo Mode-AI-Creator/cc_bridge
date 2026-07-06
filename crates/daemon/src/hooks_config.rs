@@ -71,6 +71,38 @@ pub fn apply_install(mut settings: Value, script_path: &str) -> Value {
     settings
 }
 
+/// 纯函数：注册 ccbridge MCP server（跨会话通信工具）到 `mcpServers.ccbridge`。
+pub fn apply_mcp_install(mut settings: Value, exe_path: &str) -> Value {
+    settings = apply_mcp_uninstall(settings);
+    if !settings.is_object() {
+        settings = json!({});
+    }
+    let obj = settings.as_object_mut().unwrap();
+    let servers = obj.entry("mcpServers").or_insert_with(|| json!({}));
+    if !servers.is_object() {
+        *servers = json!({});
+    }
+    servers.as_object_mut().unwrap().insert(
+        "ccbridge".to_string(),
+        json!({ "command": exe_path, "args": ["mcp"] }),
+    );
+    settings
+}
+
+/// 纯函数：移除 ccbridge MCP server；清理空 mcpServers。
+pub fn apply_mcp_uninstall(mut settings: Value) -> Value {
+    let Some(obj) = settings.as_object_mut() else {
+        return settings;
+    };
+    if let Some(servers) = obj.get_mut("mcpServers").and_then(|s| s.as_object_mut()) {
+        servers.remove("ccbridge");
+        if servers.is_empty() {
+            obj.remove("mcpServers");
+        }
+    }
+    settings
+}
+
 /// 纯函数：移除所有 ccbridge 注入的 hook group；清理空数组/空 hooks 对象。
 pub fn apply_uninstall(mut settings: Value) -> Value {
     let Some(obj) = settings.as_object_mut() else {
@@ -155,21 +187,25 @@ fn materialize_script() -> Result<String> {
     Ok(dest.display().to_string())
 }
 
-/// 执行 install：落地脚本 → 备份 → 注入 → 写回。
+/// 执行 install：落地脚本 → 备份 → 注入 hooks + MCP server → 写回。
 pub fn install() -> Result<()> {
     let path = settings_path()?;
     let script = materialize_script()?;
+    let exe = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "ccbridge".to_string());
     let settings = read_settings(&path)?;
     backup(&path)?;
-    let next = apply_install(settings, &script);
+    let next = apply_mcp_install(apply_install(settings, &script), &exe);
     write_settings(&path, &next)?;
-    println!("已注入 ccbridge hooks → {}", path.display());
+    println!("已注入 ccbridge hooks + MCP server → {}", path.display());
     println!("脚本位置: {script}");
+    println!("MCP 命令: {exe} mcp");
     println!("重启（或新开）Claude Code 会话后生效。");
     Ok(())
 }
 
-/// 执行 uninstall：备份 → 移除 → 写回。
+/// 执行 uninstall：备份 → 移除 hooks + MCP → 写回。
 pub fn uninstall() -> Result<()> {
     let path = settings_path()?;
     if !path.exists() {
@@ -178,9 +214,9 @@ pub fn uninstall() -> Result<()> {
     }
     let settings = read_settings(&path)?;
     backup(&path)?;
-    let next = apply_uninstall(settings);
+    let next = apply_mcp_uninstall(apply_uninstall(settings));
     write_settings(&path, &next)?;
-    println!("已移除 ccbridge hooks → {}", path.display());
+    println!("已移除 ccbridge hooks 与 MCP server → {}", path.display());
     Ok(())
 }
 
@@ -209,6 +245,25 @@ mod tests {
         for (_e, groups) in twice["hooks"].as_object().unwrap() {
             assert_eq!(groups.as_array().unwrap().len(), 1);
         }
+    }
+
+    #[test]
+    fn mcp_install_then_uninstall_restores() {
+        let orig = json!({ "model": "x" });
+        let installed = apply_mcp_install(orig.clone(), "/bin/ccbridge");
+        assert_eq!(installed["mcpServers"]["ccbridge"]["command"], "/bin/ccbridge");
+        assert_eq!(installed["mcpServers"]["ccbridge"]["args"][0], "mcp");
+        let restored = apply_mcp_uninstall(installed);
+        assert_eq!(restored, orig, "卸载后应移除 mcpServers");
+    }
+
+    #[test]
+    fn mcp_preserves_other_servers() {
+        let user = json!({ "mcpServers": { "other": { "command": "x" } } });
+        let installed = apply_mcp_install(user.clone(), "/bin/ccbridge");
+        assert_eq!(installed["mcpServers"]["other"]["command"], "x");
+        let restored = apply_mcp_uninstall(installed);
+        assert_eq!(restored, user);
     }
 
     #[test]

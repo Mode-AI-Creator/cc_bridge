@@ -26,6 +26,7 @@ dirs = "5"
 base64 = "0.22"
 toml = "0.8"
 rusqlite = { version = "0.31", features = ["bundled"] }
+ureq = { version = "2", default-features = false, features = ["json"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
