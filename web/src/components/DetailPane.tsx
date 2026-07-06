@@ -2,8 +2,16 @@ import { useEffect, useState } from 'react';
 import type { SessionDetail } from '../types';
 import { getDetail } from '../api';
 import { fmtCost, fmtTokens, shortModel, STATUS_LABEL } from '../lib/format';
+import { ActionStream } from './ActionStream';
+import type { ActionEvent } from '../lib/actions';
 
-export function DetailPane({ id }: { id: string | null }) {
+export function DetailPane({
+  id,
+  liveActions = [],
+}: {
+  id: string | null;
+  liveActions?: ActionEvent[];
+}) {
   const [d, setD] = useState<SessionDetail | null>(null);
 
   useEffect(() => {
@@ -41,6 +49,7 @@ export function DetailPane({ id }: { id: string | null }) {
         {d.project_path}
         {d.git_branch ? ` · ⎇ ${d.git_branch}` : ''}
       </div>
+      <ActionStream events={liveActions} />
       <div className="kv-grid small">
         <div className="kv">
           <div className="v">{STATUS_LABEL[d.status]}</div>

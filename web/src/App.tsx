@@ -15,6 +15,7 @@ import {
   loadBuckets,
   saveBuckets,
 } from './lib/classify';
+import { type ActionEvent, pushAction } from './lib/actions';
 
 // 记住上次新建会话的目录（跨平台，空则从驱动器/根开始浏览）
 const loadLastCwd = () => localStorage.getItem('ccbridge.lastCwd') || '';
@@ -84,6 +85,7 @@ export function App() {
   const [renames, setRenames] = useState<Record<string, string>>(loadRenames);
   const [overrides, setOverrides] = useState<Record<string, Bucket>>(loadBuckets);
   const [tab, setTab] = useState<Bucket>('active');
+  const [actions, setActions] = useState<Record<string, ActionEvent[]>>({});
   const [newModalOpen, setNewModalOpen] = useState(false);
   const [lastCwd, setLastCwd] = useState(loadLastCwd);
 
@@ -109,7 +111,9 @@ export function App() {
 
   useEffect(() => {
     load();
-    const stop = connectWs(load);
+    const stop = connectWs(load, (p) =>
+      setActions((a) => pushAction(a, p as never)),
+    );
     const iv = setInterval(load, 5000);
     return () => {
       stop();
@@ -278,7 +282,10 @@ export function App() {
               setListH((h) => clamp(h + dy, 160, window.innerHeight - 260))
             }
           />
-          <DetailPane id={selectedId} />
+          <DetailPane
+            id={selectedId}
+            liveActions={selectedId ? actions[selectedId] || [] : []}
+          />
         </div>
         <VResizer onResize={(dx) => setSidebarW((w) => clamp(w + dx, 280, 760))} />
         <ChatPane

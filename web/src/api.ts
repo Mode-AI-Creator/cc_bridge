@@ -11,8 +11,15 @@ export const getStats = () => json<Stats>('/api/stats');
 export const getDetail = (id: string) =>
   json<SessionDetail>(`/api/sessions/${encodeURIComponent(id)}`);
 
-/** 连接 daemon WebSocket，收到 update 时回调；断线自动重连。 */
-export function connectWs(onUpdate: () => void): () => void {
+/**
+ * 连接 daemon WebSocket；断线自动重连。
+ * - `onUpdate`：文件变更或 hook 事件时触发（用于刷新会话/状态）。
+ * - `onHook`：收到 hook 动作事件时投递原始负载（用于实时动作流）。
+ */
+export function connectWs(
+  onUpdate: () => void,
+  onHook?: (payload: Record<string, unknown>) => void,
+): () => void {
   let ws: WebSocket | null = null;
   let closed = false;
   let retry: ReturnType<typeof setTimeout> | null = null;
@@ -26,6 +33,7 @@ export function connectWs(onUpdate: () => void): () => void {
         const m = JSON.parse(e.data);
         // 文件变更或 hook 事件都触发刷新（hook → 实时精确状态）
         if (m.type === 'update' || m.type === 'hook') onUpdate();
+        if (m.type === 'hook') onHook?.(m);
       } catch {
         /* ignore */
       }
