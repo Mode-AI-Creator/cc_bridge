@@ -3,6 +3,7 @@ mod api;
 mod config;
 mod error;
 mod hooks_config;
+mod mailbox;
 mod store;
 mod supervisor;
 mod themes;
@@ -57,6 +58,10 @@ async fn main() -> anyhow::Result<()> {
 
     let sup = Arc::new(supervisor::Supervisor::new());
     let config = Arc::new(config::Config::load());
+    let mailbox = Arc::new(mailbox::Mailbox::open_default().unwrap_or_else(|e| {
+        tracing::warn!("信箱 SQLite 打开失败，降级内存库：{e}");
+        mailbox::Mailbox::open_memory().expect("内存库")
+    }));
 
     let addr = config.server.addr.clone();
     let state = api::AppState {
@@ -64,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         tx: tx.clone(),
         sup,
         config,
+        mailbox,
     };
     let app = api::with_static(api::router(state));
 

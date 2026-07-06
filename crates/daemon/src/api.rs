@@ -8,10 +8,11 @@ use axum::{
         Path as AxPath, Query, State,
     },
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
+use crate::error::{ApiError, ApiResult};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
@@ -24,6 +25,7 @@ pub struct AppState {
     pub tx: broadcast::Sender<String>,
     pub sup: Arc<Supervisor>,
     pub config: Arc<crate::config::Config>,
+    pub mailbox: Arc<crate::mailbox::Mailbox>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -46,6 +48,13 @@ pub fn router(state: AppState) -> Router {
         .route("/api/themes", get(list_themes))
         .route("/api/themes/:name/asset/:state", get(get_theme_asset))
         .route("/api/themes/:name/asset/:state", post(upload_theme_asset))
+        // 异步信箱 + 共享笔记（Phase 6）
+        .route("/api/inbox/send", post(inbox_send))
+        .route("/api/inbox/:session", get(inbox_list))
+        .route("/api/inbox/:session/read/:msgId", post(inbox_mark_read))
+        .route("/api/inbox/:session/unread", get(inbox_unread))
+        .route("/api/notes", get(notes_list).post(notes_upsert))
+        .route("/api/notes/:key", get(notes_get))
         .with_state(state)
         .layer(CorsLayer::permissive())
 }
@@ -398,6 +407,121 @@ async fn upload_theme_asset(
     }
 }
 
+// ---------- 异步信箱 + 共享笔记（Phase 6） ----------
+
+fn preview(body: &str) -> String {
+    let t: String = body.chars().take(48).collect();
+    if body.chars().count() > 48 {
+        format!("{t}…")
+    } else {
+        t
+    }
+}
+
+#[derive(Deserialize)]
+struct SendReq {
+    from: String,
+    to: String,
+    body: String,
+    #[serde(default)]
+    urgent: bool,
+}
+
+/// POST /api/inbox/send — 发消息；WS 广播 + urgent 时向活着的托管会话注入。
+async fn inbox_send(State(s): State<AppState>, Json(req): Json<SendReq>) -> ApiResult<Response> {
+    if req.to.trim().is_empty() || req.body.trim().is_empty() {
+        return Err(ApiError::bad_request("to / body 不能为空"));
+    }
+    let msg = s.mailbox.send(&req.from, &req.to, &req.body, req.urgent)?;
+    let _ = s.tx.send(
+        serde_json::json!({
+            "type": "inbox",
+            "to": msg.to,
+            "from": msg.from,
+            "preview": preview(&msg.body),
+        })
+        .to_string(),
+    );
+    // urgent 投递：若收件人是活着的托管会话，直接注入一行提示
+    if msg.urgent {
+        if let Some(sess) = s.sup.get(&msg.to) {
+            let line = format!("\r\n[ccbridge] 来自 {} 的消息: {}\r\n", msg.from, msg.body);
+            let _ = sess.write_input(line.as_bytes());
+        }
+    }
+    Ok(Json(msg).into_response())
+}
+
+#[derive(Deserialize)]
+struct InboxQuery {
+    #[serde(default)]
+    unread: bool,
+}
+
+/// GET /api/inbox/:session?unread=1 — 列收件箱。
+async fn inbox_list(
+    State(s): State<AppState>,
+    AxPath(session): AxPath<String>,
+    Query(q): Query<InboxQuery>,
+) -> ApiResult<Response> {
+    let list = s.mailbox.inbox(&session, q.unread)?;
+    Ok(Json(list).into_response())
+}
+
+/// POST /api/inbox/:session/read/:msgId — 标记已读。
+async fn inbox_mark_read(
+    State(s): State<AppState>,
+    AxPath((session, msg_id)): AxPath<(String, String)>,
+) -> ApiResult<Response> {
+    let ok = s.mailbox.mark_read(&session, &msg_id)?;
+    if !ok {
+        return Err(ApiError::not_found("消息不存在或已读"));
+    }
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+/// GET /api/inbox/:session/unread — 未读数。
+async fn inbox_unread(
+    State(s): State<AppState>,
+    AxPath(session): AxPath<String>,
+) -> ApiResult<Response> {
+    let n = s.mailbox.unread_count(&session)?;
+    Ok(Json(serde_json::json!({ "unread": n })).into_response())
+}
+
+#[derive(Deserialize)]
+struct NoteReq {
+    key: String,
+    body: String,
+    #[serde(default)]
+    author: String,
+}
+
+/// POST /api/notes — upsert 共享笔记。
+async fn notes_upsert(State(s): State<AppState>, Json(req): Json<NoteReq>) -> ApiResult<Response> {
+    if req.key.trim().is_empty() {
+        return Err(ApiError::bad_request("key 不能为空"));
+    }
+    let note = s.mailbox.note_upsert(&req.key, &req.body, &req.author)?;
+    Ok(Json(note).into_response())
+}
+
+/// GET /api/notes — 全部笔记。
+async fn notes_list(State(s): State<AppState>) -> ApiResult<Response> {
+    Ok(Json(s.mailbox.notes_all()?).into_response())
+}
+
+/// GET /api/notes/:key — 单条笔记。
+async fn notes_get(
+    State(s): State<AppState>,
+    AxPath(key): AxPath<String>,
+) -> ApiResult<Response> {
+    match s.mailbox.note_get(&key)? {
+        Some(n) => Ok(Json(n).into_response()),
+        None => Err(ApiError::not_found("无此笔记")),
+    }
+}
+
 // ---------- HTTP 冒烟测试（Phase 3） ----------
 
 #[cfg(test)]
@@ -415,6 +539,7 @@ mod tests {
             tx,
             sup: Arc::new(Supervisor::new()),
             config: Arc::new(crate::config::Config::default()),
+            mailbox: Arc::new(crate::mailbox::Mailbox::open_memory().unwrap()),
         }
     }
 
@@ -485,6 +610,45 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn inbox_send_then_list() {
+        let app = router(test_state());
+        let send = Request::builder()
+            .method("POST")
+            .uri("/api/inbox/send")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"from":"A","to":"B","body":"hi"}"#))
+            .unwrap();
+        let res = app.clone().oneshot(send).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let list = Request::builder()
+            .uri("/api/inbox/B")
+            .body(Body::empty())
+            .unwrap();
+        let res2 = app.oneshot(list).await.unwrap();
+        assert_eq!(res2.status(), StatusCode::OK);
+        let body = to_bytes(res2.into_body(), usize::MAX).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v.as_array().unwrap().len(), 1);
+        assert_eq!(v[0]["body"], "hi");
+    }
+
+    #[tokio::test]
+    async fn inbox_send_rejects_empty() {
+        let bad = Request::builder()
+            .method("POST")
+            .uri("/api/inbox/send")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"from":"A","to":"","body":"x"}"#))
+            .unwrap();
+        let res = router(test_state()).oneshot(bad).await.unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(v["error"].is_string()); // 统一 error envelope
     }
 
     #[tokio::test]
