@@ -117,7 +117,7 @@ export function App() {
 
   // 可调节面板尺寸
   const [taskbarW, setTaskbarW] = useState(184);
-  const [sidebarW, setSidebarW] = useState(380);
+  const [sidebarW, setSidebarW] = useState(340);
   const [listH, setListH] = useState(300);
   const [taskbarCollapsed, setTaskbarCollapsed] = useState(false);
   const [skipPerms, setSkipPerms] = useState(

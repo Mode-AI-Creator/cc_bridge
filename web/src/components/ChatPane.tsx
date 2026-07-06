@@ -39,32 +39,34 @@ export function ChatPane({
   return (
     <div className="chat-pane">
       <div className="chat-tabs">
-        {chats.length === 0 && (
-          <span className="chat-tabs-empty">
-            无进行中的对话 · 选会话「▶ 继续对话」或「＋ 新会话」
-          </span>
-        )}
-        {chats.map((c) => (
-          <div
-            key={c.id}
-            className={`chat-tab ${c.id === activeChatId ? 'on' : ''}`}
-            onClick={() => onSelectChat(c.id)}
-            title={c.title}
-          >
-            <span className="status-dot live" />
-            <span className="chat-tab-name">{c.title}</span>
-            <button
-              className="chat-tab-x"
-              title="收起（进程继续后台运行，可从「运行中」重开）"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCloseChat(c.id);
-              }}
+        <div className="chat-tabs-scroll">
+          {chats.length === 0 && (
+            <span className="chat-tabs-empty">
+              无进行中的对话 · 选会话「▶ 继续对话」或「＋ 新会话」
+            </span>
+          )}
+          {chats.map((c) => (
+            <div
+              key={c.id}
+              className={`chat-tab ${c.id === activeChatId ? 'on' : ''}`}
+              onClick={() => onSelectChat(c.id)}
+              title={c.title}
             >
-              ×
-            </button>
-          </div>
-        ))}
+              <span className="status-dot live" />
+              <span className="chat-tab-name">{c.title}</span>
+              <button
+                className="chat-tab-x"
+                title="收起（进程继续后台运行，可从「运行中」重开）"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseChat(c.id);
+                }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
 
         <div className="running-menu">
           <button

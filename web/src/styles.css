@@ -721,9 +721,17 @@ body {
   gap: 6px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border-soft);
-  overflow-x: auto;
+  overflow: visible; /* 让「运行中」弹窗不被裁剪 */
   min-height: 46px;
   flex: none;
+}
+.chat-tabs-scroll {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  min-width: 0;
 }
 .chat-tabs-empty {
   color: var(--text-faint);
