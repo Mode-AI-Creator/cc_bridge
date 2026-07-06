@@ -119,13 +119,18 @@ last-prompt / mode / permission-mode / ai-title / queue-operation`。
 | 阶段 | 状态 |
 |---|---|
 | Phase 0–2 MVP 可观测性（发现/解析/成本/dashboard） | ✅ |
-| PTY 托管（前端直接交互，原 Phase 6 待决策项） | ✅ |
-| 多会话切换不打断 · 终端自动重连+心跳 · 复制粘贴 | ✅ |
-| Phase 4 部分（active-only 看板 + 拖入/拖出显示） | ✅ |
-| 新建会话目录选择器（浏览 + 新建文件夹，跨平台） | ✅ |
-| Phase 3 / 4剩余 / 5 / 6剩余 / 7 / 8 | ⬜ |
+| PTY 托管（前端直接交互）+ 多会话不打断 + 重连 + 复制粘贴 + 托管重连 | ✅ |
+| Phase 3 hook 集成（精确状态 + 动作流 + 自动配置器 install/uninstall） | ✅ |
+| Phase 4 三态看板（active/inactive/history + 拖拽归类 + 持久化 + 跨会话搜索） | ✅ |
+| Phase 5 像素吉祥物 Coding Pet（眼睛跟随）+ 可换肤主题（用户上传） | ✅ |
+| Phase 6 跨会话通信：SQLite 信箱 + 共享笔记 + MCP server + 前端消息总线 | ✅ |
+| 1.0 后端 P0：统一 config / 统一 error envelope / SQLite 持久层 | ✅ |
+| 1.0 前端 P0：错误边界 / 断线横幅 / 连通性追踪 | ✅ |
+| 1.0 质量 P0：CI（Rust 跨平台 matrix + Web + audit）+ Playwright E2E | ✅ |
+| 1.0 发布 P0：embed-frontend 单二进制 + release workflow + 文档全套 | ✅ |
+| Phase 7 TUI（ratatui）/ 远程 SSH / i18n / a11y 等 | ⬜（1.0 后） |
 
-每个阶段落地时在关键节点补 **冒烟测试 + 用例测试** 保证鲁棒性。
+每个阶段落地时在关键节点补 **冒烟测试 + 用例测试**：现共 **62** 个测试（41 Rust + 21 前端）全绿。
 
 ### Phase 3 — Hook 集成（实时事实层）
 
