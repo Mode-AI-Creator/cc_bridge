@@ -769,6 +769,117 @@ body {
 .chat-tab-x:hover {
   color: var(--error);
 }
+
+/* 运行中（后台托管会话）菜单 */
+.running-menu {
+  position: relative;
+  margin-left: auto;
+  flex: none;
+}
+.running-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.running-btn:hover {
+  color: var(--text);
+}
+.running-btn.has {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.running-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.running-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 41;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  padding: 5px;
+}
+.running-empty {
+  color: var(--text-faint);
+  font-size: 0.76rem;
+  padding: 10px 12px;
+}
+.running-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.running-open {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 0.78rem;
+  padding: 7px 8px;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+}
+.running-open:hover {
+  background: var(--surface-2);
+}
+.run-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex: none;
+}
+.run-dot.on {
+  background: var(--idle);
+  box-shadow: 0 0 6px var(--idle);
+}
+.run-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-state {
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  flex: none;
+}
+.running-kill {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  flex: none;
+}
+.running-kill:hover {
+  color: var(--error);
+}
+.chat-empty-hint {
+  margin-top: 8px;
+  font-size: 0.74rem;
+  color: var(--accent);
+}
 .chat-body {
   flex: 1;
   position: relative;

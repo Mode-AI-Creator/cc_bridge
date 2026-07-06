@@ -1,6 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { SessionSummary, Stats } from './types';
-import { getSessions, getStats, getThemes, connectWs } from './api';
+import {
+  getSessions,
+  getStats,
+  getThemes,
+  getManaged,
+  killManaged,
+  connectWs,
+} from './api';
+import type { ManagedInfo } from './types';
 import { type DiskTheme, loadSkin, saveSkin } from './lib/skins';
 import { StatsBar } from './components/StatsBar';
 import { TaskBar } from './components/TaskBar';
@@ -87,6 +95,7 @@ export function App() {
   const [overrides, setOverrides] = useState<Record<string, Bucket>>(loadBuckets);
   const [tab, setTab] = useState<Bucket>('active');
   const [actions, setActions] = useState<Record<string, ActionEvent[]>>({});
+  const [managed, setManaged] = useState<ManagedInfo[]>([]);
   const [skin, setSkin] = useState<string>(loadSkin);
   const [themes, setThemes] = useState<DiskTheme[]>([]);
   const [themeVersion, setThemeVersion] = useState(0);
@@ -109,7 +118,7 @@ export function App() {
   // 可调节面板尺寸
   const [taskbarW, setTaskbarW] = useState(184);
   const [sidebarW, setSidebarW] = useState(380);
-  const [listH, setListH] = useState(380);
+  const [listH, setListH] = useState(300);
   const [taskbarCollapsed, setTaskbarCollapsed] = useState(false);
   const [skipPerms, setSkipPerms] = useState(
     () => localStorage.getItem('ccbridge.skipPerms') === '1',
@@ -124,6 +133,9 @@ export function App() {
   const load = () => {
     getSessions().then(setSessions).catch(() => {});
     getStats().then(setStats).catch(() => {});
+    getManaged()
+      .then((m) => setManaged(m.filter((x) => x.alive)))
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -240,12 +252,27 @@ export function App() {
     if (c?.sessionId) setSelectedId(c.sessionId);
   };
 
-  const closeChat = async (termId: string) => {
-    await fetch('/api/managed/' + termId + '/kill', { method: 'POST' }).catch(
-      () => {},
-    );
+  // 关闭 tab = 收起（进程仍在后台运行，可从「运行中」重开）
+  const detachChat = (termId: string) => {
     setChats((prev) => prev.filter((c) => c.id !== termId));
     setActiveChatId((prev) => (prev === termId ? null : prev));
+  };
+
+  // 结束托管进程（真正 kill），并收起其 tab
+  const killChat = async (termId: string) => {
+    await killManaged(termId).catch(() => {});
+    detachChat(termId);
+    setManaged((prev) => prev.filter((m) => m.id !== termId));
+  };
+
+  // 打开/重开某托管会话的终端（刷新或收起后重连）
+  const openManaged = (info: ManagedInfo) => {
+    setChats((prev) =>
+      prev.some((c) => c.id === info.id)
+        ? prev
+        : [...prev, { id: info.id, title: info.title }],
+    );
+    setActiveChatId(info.id);
   };
 
   const workspaceVars = {
@@ -315,8 +342,11 @@ export function App() {
           chats={chats}
           activeChatId={activeChatId}
           selected={selectedSession}
+          managed={managed}
           onSelectChat={selectChat}
-          onCloseChat={closeChat}
+          onCloseChat={detachChat}
+          onOpenManaged={openManaged}
+          onKillManaged={killChat}
           onResume={resume}
         />
       </div>

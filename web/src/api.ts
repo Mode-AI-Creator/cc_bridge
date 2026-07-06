@@ -1,4 +1,10 @@
-import type { SessionSummary, SessionDetail, Stats, SessionStatus } from './types';
+import type {
+  SessionSummary,
+  SessionDetail,
+  Stats,
+  SessionStatus,
+  ManagedInfo,
+} from './types';
 import type { DiskTheme } from './lib/skins';
 
 async function json<T>(url: string): Promise<T> {
@@ -13,6 +19,11 @@ export const getDetail = (id: string) =>
   json<SessionDetail>(`/api/sessions/${encodeURIComponent(id)}`);
 
 export const getThemes = () => json<DiskTheme[]>('/api/themes');
+
+export const getManaged = () => json<ManagedInfo[]>('/api/managed');
+
+export const killManaged = (id: string) =>
+  fetch('/api/managed/' + encodeURIComponent(id) + '/kill', { method: 'POST' });
 
 /** 上传单个状态资产（读为 base64 后 POST）。 */
 export async function uploadThemeAsset(

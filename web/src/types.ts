@@ -50,6 +50,14 @@ export interface SessionDetail extends SessionSummary {
   ticks: UsageTick[];
 }
 
+export interface ManagedInfo {
+  id: string;
+  cwd: string;
+  title: string;
+  created_at: number;
+  alive: boolean;
+}
+
 export interface StatusCounts {
   working: number;
   waiting: number;

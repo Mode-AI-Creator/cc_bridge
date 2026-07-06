@@ -97,7 +97,7 @@ export function DetailPane({
         </div>
       </div>
       <div className="section-title">
-        {showClawd ? 'Clawd' : '工具调用'}
+        {showClawd ? 'Coding Pet' : '工具调用'}
         <span className="muted">· {d.tool_count}</span>
         {showClawd && (
           <button
