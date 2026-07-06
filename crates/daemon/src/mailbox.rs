@@ -217,8 +217,8 @@ impl Mailbox {
 
     pub fn notes_all(&self) -> Result<Vec<Note>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("SELECT key, body, author, updated_at FROM notes ORDER BY updated_at DESC")?;
+        let mut stmt = conn
+            .prepare("SELECT key, body, author, updated_at FROM notes ORDER BY updated_at DESC")?;
         let rows = stmt.query_map([], |r| {
             Ok(Note {
                 key: r.get(0)?,

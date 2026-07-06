@@ -126,9 +126,10 @@ impl Supervisor {
                 }
             }
             s2.alive.store(false, Ordering::SeqCst);
-            let _ = s2
-                .output_tx
-                .send(b"\r\n[ccbridge] \xe4\xbc\x9a\xe8\xaf\x9d\xe5\xb7\xb2\xe7\xbb\x93\xe6\x9d\x9f\r\n".to_vec());
+            let _ = s2.output_tx.send(
+                b"\r\n[ccbridge] \xe4\xbc\x9a\xe8\xaf\x9d\xe5\xb7\xb2\xe7\xbb\x93\xe6\x9d\x9f\r\n"
+                    .to_vec(),
+            );
         });
 
         self.sessions.write().unwrap().insert(id.clone(), session);

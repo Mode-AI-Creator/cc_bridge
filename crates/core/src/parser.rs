@@ -219,7 +219,11 @@ fn extract_user_text(msg: &serde_json::Value) -> Option<String> {
     let content = msg.get("content")?;
     if let Some(s) = content.as_str() {
         let s = s.trim();
-        return if s.is_empty() { None } else { Some(s.to_string()) };
+        return if s.is_empty() {
+            None
+        } else {
+            Some(s.to_string())
+        };
     }
     if let Some(arr) = content.as_array() {
         let mut buf = String::new();

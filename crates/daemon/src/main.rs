@@ -35,8 +35,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -49,11 +48,7 @@ async fn main() -> anyhow::Result<()> {
     let mut store = store::Store::new();
     let t0 = std::time::Instant::now();
     store.reload_all(&projects);
-    tracing::info!(
-        "已加载 {} 个会话（耗时 {:?}）",
-        store.len(),
-        t0.elapsed()
-    );
+    tracing::info!("已加载 {} 个会话（耗时 {:?}）", store.len(), t0.elapsed());
     let store = Arc::new(RwLock::new(store));
 
     let (tx, _rx) = broadcast::channel::<String>(64);

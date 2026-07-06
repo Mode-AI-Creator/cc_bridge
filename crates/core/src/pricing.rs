@@ -13,12 +13,27 @@ pub struct Price {
 pub fn price_for(model: &str) -> Price {
     let m = model.to_lowercase();
     if m.contains("opus") {
-        Price { input: 15.0, output: 75.0, cache_write: 18.75, cache_read: 1.5 }
+        Price {
+            input: 15.0,
+            output: 75.0,
+            cache_write: 18.75,
+            cache_read: 1.5,
+        }
     } else if m.contains("haiku") {
-        Price { input: 1.0, output: 5.0, cache_write: 1.25, cache_read: 0.1 }
+        Price {
+            input: 1.0,
+            output: 5.0,
+            cache_write: 1.25,
+            cache_read: 0.1,
+        }
     } else {
         // sonnet 及未知
-        Price { input: 3.0, output: 15.0, cache_write: 3.75, cache_read: 0.3 }
+        Price {
+            input: 3.0,
+            output: 15.0,
+            cache_write: 3.75,
+            cache_read: 0.3,
+        }
     }
 }
 

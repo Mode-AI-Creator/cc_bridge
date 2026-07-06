@@ -47,9 +47,7 @@ pub fn apply_install(mut settings: Value, script_path: &str) -> Value {
         settings = json!({});
     }
     let obj = settings.as_object_mut().unwrap();
-    let hooks = obj
-        .entry("hooks")
-        .or_insert_with(|| json!({}));
+    let hooks = obj.entry("hooks").or_insert_with(|| json!({}));
     if !hooks.is_object() {
         *hooks = json!({});
     }
@@ -148,12 +146,13 @@ fn read_settings(path: &PathBuf) -> Result<Value> {
     if !path.exists() {
         return Ok(json!({}));
     }
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("读取失败: {}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("读取失败: {}", path.display()))?;
     if text.trim().is_empty() {
         return Ok(json!({}));
     }
-    serde_json::from_str(&text).with_context(|| format!("settings.json 非法 JSON: {}", path.display()))
+    serde_json::from_str(&text)
+        .with_context(|| format!("settings.json 非法 JSON: {}", path.display()))
 }
 
 fn backup(path: &PathBuf) -> Result<()> {
@@ -251,7 +250,10 @@ mod tests {
     fn mcp_install_then_uninstall_restores() {
         let orig = json!({ "model": "x" });
         let installed = apply_mcp_install(orig.clone(), "/bin/ccbridge");
-        assert_eq!(installed["mcpServers"]["ccbridge"]["command"], "/bin/ccbridge");
+        assert_eq!(
+            installed["mcpServers"]["ccbridge"]["command"],
+            "/bin/ccbridge"
+        );
         assert_eq!(installed["mcpServers"]["ccbridge"]["args"][0], "mcp");
         let restored = apply_mcp_uninstall(installed);
         assert_eq!(restored, orig, "卸载后应移除 mcpServers");

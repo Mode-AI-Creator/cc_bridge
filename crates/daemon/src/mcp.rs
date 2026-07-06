@@ -85,7 +85,12 @@ pub struct CallPlan {
 
 /// 纯函数：把工具名 + 参数 + 自身身份，映射为 HTTP 计划。
 pub fn plan_call(me: &str, name: &str, args: &Value) -> Result<CallPlan> {
-    let s = |k: &str| args.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let s = |k: &str| {
+        args.get(k)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
     let b = |k: &str| args.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
     Ok(match name {
         "inbox_read" => CallPlan {
@@ -101,7 +106,9 @@ pub fn plan_call(me: &str, name: &str, args: &Value) -> Result<CallPlan> {
         "send_to_session" => CallPlan {
             method: "POST",
             path: "/api/inbox/send".to_string(),
-            body: Some(json!({ "from": me, "to": s("to"), "body": s("body"), "urgent": b("urgent") })),
+            body: Some(
+                json!({ "from": me, "to": s("to"), "body": s("body"), "urgent": b("urgent") }),
+            ),
             filter: None,
         },
         "shared_note_write" => CallPlan {
@@ -258,34 +265,58 @@ mod tests {
 
     #[test]
     fn initialize_reports_server_info() {
-        let r = handle("me", 7878, &json!({"jsonrpc":"2.0","id":1,"method":"initialize"})).unwrap();
+        let r = handle(
+            "me",
+            7878,
+            &json!({"jsonrpc":"2.0","id":1,"method":"initialize"}),
+        )
+        .unwrap();
         assert_eq!(r["result"]["serverInfo"]["name"], "ccbridge");
         assert_eq!(r["result"]["protocolVersion"], PROTOCOL_VERSION);
     }
 
     #[test]
     fn tools_list_has_expected_tools() {
-        let r = handle("me", 7878, &json!({"jsonrpc":"2.0","id":2,"method":"tools/list"})).unwrap();
+        let r = handle(
+            "me",
+            7878,
+            &json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
+        )
+        .unwrap();
         let names: Vec<&str> = r["result"]["tools"]
             .as_array()
             .unwrap()
             .iter()
             .map(|t| t["name"].as_str().unwrap())
             .collect();
-        for t in ["inbox_read", "send_to_session", "shared_note_write", "list_sessions"] {
+        for t in [
+            "inbox_read",
+            "send_to_session",
+            "shared_note_write",
+            "list_sessions",
+        ] {
             assert!(names.contains(&t), "missing {t}");
         }
     }
 
     #[test]
     fn notification_gets_no_response() {
-        let r = handle("me", 7878, &json!({"jsonrpc":"2.0","method":"notifications/initialized"}));
+        let r = handle(
+            "me",
+            7878,
+            &json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+        );
         assert!(r.is_none());
     }
 
     #[test]
     fn plan_send_uses_me_as_from() {
-        let p = plan_call("sessA", "send_to_session", &json!({"to":"sessB","body":"hi","urgent":true})).unwrap();
+        let p = plan_call(
+            "sessA",
+            "send_to_session",
+            &json!({"to":"sessB","body":"hi","urgent":true}),
+        )
+        .unwrap();
         assert_eq!(p.method, "POST");
         assert_eq!(p.path, "/api/inbox/send");
         let b = p.body.unwrap();

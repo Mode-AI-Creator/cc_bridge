@@ -1,7 +1,7 @@
 //! HTTP + WebSocket API。
+use crate::error::{ApiError, ApiResult};
 use crate::store::Store;
 use crate::supervisor::Supervisor;
-use ccbridge_core::HookKind;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -12,7 +12,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use crate::error::{ApiError, ApiResult};
+use ccbridge_core::HookKind;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
@@ -64,8 +64,8 @@ pub fn with_static(app: Router) -> Router {
     use tower_http::services::{ServeDir, ServeFile};
     for cand in ["web/dist", "../../web/dist", "../web/dist"] {
         if std::path::Path::new(cand).exists() {
-            let serve = ServeDir::new(cand)
-                .not_found_service(ServeFile::new(format!("{cand}/index.html")));
+            let serve =
+                ServeDir::new(cand).not_found_service(ServeFile::new(format!("{cand}/index.html")));
             tracing::info!("静态前端目录: {}", cand);
             return app.fallback_service(serve);
         }
@@ -375,11 +375,7 @@ async fn list_themes() -> impl IntoResponse {
 /// GET /api/themes/:name/asset/:state — 返回资产字节。
 async fn get_theme_asset(AxPath((name, state)): AxPath<(String, String)>) -> impl IntoResponse {
     match crate::themes::read_asset(&name, &state) {
-        Some((bytes, ct)) => (
-            [(axum::http::header::CONTENT_TYPE, ct)],
-            bytes,
-        )
-            .into_response(),
+        Some((bytes, ct)) => ([(axum::http::header::CONTENT_TYPE, ct)], bytes).into_response(),
         None => (StatusCode::NOT_FOUND, "无此资产").into_response(),
     }
 }
@@ -512,10 +508,7 @@ async fn notes_list(State(s): State<AppState>) -> ApiResult<Response> {
 }
 
 /// GET /api/notes/:key — 单条笔记。
-async fn notes_get(
-    State(s): State<AppState>,
-    AxPath(key): AxPath<String>,
-) -> ApiResult<Response> {
+async fn notes_get(State(s): State<AppState>, AxPath(key): AxPath<String>) -> ApiResult<Response> {
     match s.mailbox.note_get(&key)? {
         Some(n) => Ok(Json(n).into_response()),
         None => Err(ApiError::not_found("无此笔记")),
@@ -658,9 +651,7 @@ mod tests {
             .method("POST")
             .uri("/api/themes/myskin/asset/idle")
             .header("content-type", "application/json")
-            .body(Body::from(
-                r#"{"filename":"x.bmp","data_base64":"AAAA"}"#,
-            ))
+            .body(Body::from(r#"{"filename":"x.bmp","data_base64":"AAAA"}"#))
             .unwrap();
         let res = router(test_state()).oneshot(bad).await.unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);

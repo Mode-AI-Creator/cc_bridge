@@ -1,5 +1,7 @@
 //! 内存会话存储 + 统计聚合（MVP；SQLite 持久化留作后续）。
-use ccbridge_core::{discovery, parser, ParsedSession, SessionDetail, SessionStatus, SessionSummary};
+use ccbridge_core::{
+    discovery, parser, ParsedSession, SessionDetail, SessionStatus, SessionSummary,
+};
 use chrono::{TimeZone, Utc};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -216,7 +218,11 @@ impl Store {
         }
 
         let mut by_project: Vec<ProjectStat> = by_project.into_values().collect();
-        by_project.sort_by(|a, b| b.cost_usd.partial_cmp(&a.cost_usd).unwrap_or(std::cmp::Ordering::Equal));
+        by_project.sort_by(|a, b| {
+            b.cost_usd
+                .partial_cmp(&a.cost_usd)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // 生成连续 84 天热力图
         let mut heatmap = Vec::with_capacity(heatmap_days as usize);

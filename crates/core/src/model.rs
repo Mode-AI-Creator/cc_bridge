@@ -131,7 +131,10 @@ mod tests {
 
     #[test]
     fn implied_status_maps_working_vs_waiting() {
-        assert_eq!(HookKind::PreToolUse.implied_status(), SessionStatus::Working);
+        assert_eq!(
+            HookKind::PreToolUse.implied_status(),
+            SessionStatus::Working
+        );
         assert_eq!(
             HookKind::UserPromptSubmit.implied_status(),
             SessionStatus::Working
@@ -164,7 +167,8 @@ mod tests {
     fn resolve_waiting_decays_to_idle() {
         let fresh = SessionStatus::resolve(Some((SessionStatus::Waiting, 60)), 9999);
         assert_eq!(fresh, SessionStatus::Waiting);
-        let stale = SessionStatus::resolve(Some((SessionStatus::Waiting, HOOK_WAITING_TTL + 1)), 9999);
+        let stale =
+            SessionStatus::resolve(Some((SessionStatus::Waiting, HOOK_WAITING_TTL + 1)), 9999);
         assert_eq!(stale, SessionStatus::Idle);
     }
 

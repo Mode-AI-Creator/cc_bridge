@@ -46,7 +46,11 @@ pub fn validate_upload(state: &str, filename: &str, byte_len: usize) -> Result<S
     if !ALLOWED_EXT.contains(&ext.as_str()) {
         bail!("不支持的格式: .{ext}（允许 {ALLOWED_EXT:?}）");
     }
-    Ok(if ext == "apng" { "png".to_string() } else { ext })
+    Ok(if ext == "apng" {
+        "png".to_string()
+    } else {
+        ext
+    })
 }
 
 /// 校验主题名：仅允许 `[a-zA-Z0-9_-]`，非空、≤48 字符，防路径穿越。
@@ -57,7 +61,10 @@ pub fn validate_theme_name(name: &str) -> Result<()> {
     if name == "builtin" {
         bail!("builtin 为内置皮肤，不能覆盖");
     }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
         bail!("主题名仅允许字母/数字/下划线/连字符");
     }
     Ok(())
@@ -114,7 +121,9 @@ pub fn list_themes() -> Vec<ThemeInfo> {
 
 /// 读取某主题某状态的资产字节 + content-type。
 pub fn read_asset(name: &str, state: &str) -> Option<(Vec<u8>, &'static str)> {
-    validate_theme_name(name).ok().or(if name == "official" { Some(()) } else { None })?;
+    validate_theme_name(name)
+        .ok()
+        .or(if name == "official" { Some(()) } else { None })?;
     if !STATES.contains(&state) {
         return None;
     }
@@ -164,7 +173,8 @@ mod tests {
         assert!(validate_upload("idle", "x.bmp", 10).is_err()); // 格式非法
         assert!(validate_upload("idle", "noext", 10).is_err()); // 无扩展名
         assert!(validate_upload("idle", "x.png", 0).is_err()); // 空
-        assert!(validate_upload("idle", "x.png", MAX_ASSET_BYTES + 1).is_err()); // 超大
+        assert!(validate_upload("idle", "x.png", MAX_ASSET_BYTES + 1).is_err());
+        // 超大
     }
 
     #[test]
