@@ -1358,96 +1358,43 @@ body {
   padding: 80px 20px;
 }
 
-/* ---------- 实时动作流（像素 / CC 终端风） ---------- */
-.action-stream {
-  margin: 8px 0 4px;
+/* ---------- Clawd 像素小精灵 ---------- */
+.clawd-toggle {
+  margin-left: auto;
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: #14130f;
-  overflow: hidden;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  line-height: 1;
+  padding: 3px 7px;
 }
-.as-head {
+.clawd-toggle:hover {
+  border-color: var(--accent);
+}
+.clawd-stage {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background:
+    radial-gradient(circle at 50% 38%, rgba(217, 119, 87, 0.09), transparent 60%),
+    #14130f;
+}
+.clawd-cv {
+  width: 132px;
+  height: 132px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.clawd-caption {
   font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 0.72rem;
   color: var(--text-dim);
-  border-bottom: 1px solid var(--border-soft);
-}
-.as-rec {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--working);
-  box-shadow: 0 0 6px var(--working);
-  animation: as-pulse 1.2s ease-in-out infinite;
-}
-@keyframes as-pulse {
-  50% {
-    opacity: 0.3;
-  }
-}
-.as-body {
-  position: relative;
-  max-height: 148px;
-  overflow-y: auto;
-  padding: 6px 10px 8px;
-  font-family: var(--mono);
-  font-size: 0.76rem;
-  line-height: 1.5;
-  /* 扫描线质感 */
-  background-image: repeating-linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.02) 0px,
-    rgba(255, 255, 255, 0.02) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-}
-.as-line {
-  display: flex;
-  gap: 9px;
-  white-space: nowrap;
-  color: var(--text-dim);
-}
-.as-line .as-t {
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
-.as-line .as-g {
-  color: var(--text);
-}
-.as-line.s-working .as-g {
-  color: var(--accent);
-}
-.as-line.s-waiting .as-g {
-  color: var(--waiting);
-}
-.as-line.live {
-  animation: as-in 0.18s ease-out;
-}
-.as-line.live .as-g {
-  text-shadow: 0 0 8px currentColor;
-}
-@keyframes as-in {
-  from {
-    opacity: 0;
-    transform: translateX(-4px);
-  }
-}
-.as-cursor {
-  display: inline-block;
-  color: var(--accent);
-  animation: as-blink 1s step-end infinite;
-}
-@keyframes as-blink {
-  50% {
-    opacity: 0;
-  }
+  letter-spacing: 0.04em;
 }
 
 /* ---------- 新建会话弹窗 ---------- */

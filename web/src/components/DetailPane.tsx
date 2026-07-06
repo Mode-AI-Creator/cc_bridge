@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { SessionDetail } from '../types';
 import { getDetail } from '../api';
 import { fmtCost, fmtTokens, shortModel, STATUS_LABEL } from '../lib/format';
-import { ActionStream } from './ActionStream';
+import { ClawdSprite } from './ClawdSprite';
 import type { ActionEvent } from '../lib/actions';
 
 export function DetailPane({
@@ -13,6 +13,14 @@ export function DetailPane({
   liveActions?: ActionEvent[];
 }) {
   const [d, setD] = useState<SessionDetail | null>(null);
+  const [showClawd, setShowClawd] = useState(
+    () => localStorage.getItem('ccbridge.clawd') !== '0',
+  );
+  const toggleClawd = () =>
+    setShowClawd((v) => {
+      localStorage.setItem('ccbridge.clawd', v ? '0' : '1');
+      return !v;
+    });
 
   useEffect(() => {
     if (!id) {
@@ -49,7 +57,6 @@ export function DetailPane({
         {d.project_path}
         {d.git_branch ? ` · ⎇ ${d.git_branch}` : ''}
       </div>
-      <ActionStream events={liveActions} />
       <div className="kv-grid small">
         <div className="kv">
           <div className="v">{STATUS_LABEL[d.status]}</div>
@@ -77,17 +84,36 @@ export function DetailPane({
         </div>
       </div>
       <div className="section-title">
-        工具调用 <span className="muted">· {d.tool_count}</span>
+        {showClawd ? 'Clawd' : '工具调用'}
+        <span className="muted">· {d.tool_count}</span>
+        <button
+          className="clawd-toggle"
+          onClick={toggleClawd}
+          title={showClawd ? '切换到工具日志' : '切换到 Clawd 精灵'}
+        >
+          {showClawd ? '📜' : '🐾'}
+        </button>
       </div>
-      <div className="tool-scroll">
-        {d.recent_tools.length === 0 && <div className="muted sm">无</div>}
-        {[...d.recent_tools].reverse().map((t, i) => (
-          <div className="tool-row" key={i}>
-            <span className="tname">{t.name}</span>
-            <span className="tdetail">{t.detail}</span>
+      {showClawd ? (
+        <div className="clawd-stage">
+          <ClawdSprite status={d.status} />
+          <div className="clawd-caption">
+            {liveActions.length && liveActions[liveActions.length - 1].tool
+              ? `正在 · ${liveActions[liveActions.length - 1].tool}`
+              : STATUS_LABEL[d.status]}
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="tool-scroll">
+          {d.recent_tools.length === 0 && <div className="muted sm">无</div>}
+          {[...d.recent_tools].reverse().map((t, i) => (
+            <div className="tool-row" key={i}>
+              <span className="tname">{t.name}</span>
+              <span className="tdetail">{t.detail}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
