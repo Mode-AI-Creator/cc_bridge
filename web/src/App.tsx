@@ -9,7 +9,8 @@ import { ChatPane, type ChatEntry } from './components/ChatPane';
 import { NewSessionModal } from './components/NewSessionModal';
 import { loadRenames, saveRenames } from './lib/renames';
 
-const DEFAULT_CWD = 'D:\\Project_2026\\claude_code_session_management';
+// 记住上次新建会话的目录（跨平台，空则从驱动器/根开始浏览）
+const loadLastCwd = () => localStorage.getItem('ccbridge.lastCwd') || '';
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -76,6 +77,7 @@ export function App() {
   const [renames, setRenames] = useState<Record<string, string>>(loadRenames);
   const [shownIds, setShownIds] = useState<Set<string>>(new Set());
   const [newModalOpen, setNewModalOpen] = useState(false);
+  const [lastCwd, setLastCwd] = useState(loadLastCwd);
 
   // 可调节面板尺寸
   const [taskbarW, setTaskbarW] = useState(184);
@@ -281,10 +283,12 @@ export function App() {
       </div>
       <NewSessionModal
         open={newModalOpen}
-        initialPath={activeProject || DEFAULT_CWD}
+        initialPath={activeProject || lastCwd}
         onCancel={() => setNewModalOpen(false)}
         onConfirm={(cwd) => {
           setNewModalOpen(false);
+          setLastCwd(cwd);
+          localStorage.setItem('ccbridge.lastCwd', cwd);
           newSessionAt(cwd);
         }}
       />
