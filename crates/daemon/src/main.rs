@@ -1,5 +1,6 @@
 //! ccbridge daemon：发现 + 解析 + 监控本地 Claude Code 会话，提供 HTTP/WS API。
 mod api;
+mod error;
 mod hooks_config;
 mod store;
 mod supervisor;
