@@ -1,9 +1,14 @@
 //! 会话文件发现：扫描 `~/.claude/projects/**/*.jsonl`。
 use std::path::{Path, PathBuf};
 
+/// 返回 `~/.claude` 目录（若可定位 home）。
+pub fn claude_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".claude"))
+}
+
 /// 返回 `~/.claude/projects` 目录（若可定位 home）。
 pub fn claude_projects_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".claude").join("projects"))
+    claude_dir().map(|c| c.join("projects"))
 }
 
 /// 递归查找根目录下所有 `.jsonl` 文件。容错：忽略无法读取的目录。

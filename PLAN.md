@@ -110,6 +110,80 @@ last-prompt / mode / permission-mode / ai-title / queue-operation`。
 
 **待决策**：前端「直接交互」的注入机制（见下）。这是硬约束 —— 本机 Windows 原生无 tmux，向运行中的 CC 会话注入输入只能靠 tmux send-keys（WSL/远程）、PTY 托管、或异步信箱注入三选一。
 
+## 6.6 修订版路线图与进度（2026-07 现状对齐）
+
+> 本节是当前权威路线图。「注入机制」待决策项已定为 **PTY 托管** 并落地；据此 session↔pane 映射对 ccbridge 自己拉起的会话不再需要。
+
+### 进度基线
+
+| 阶段 | 状态 |
+|---|---|
+| Phase 0–2 MVP 可观测性（发现/解析/成本/dashboard） | ✅ |
+| PTY 托管（前端直接交互，原 Phase 6 待决策项） | ✅ |
+| 多会话切换不打断 · 终端自动重连+心跳 · 复制粘贴 | ✅ |
+| Phase 4 部分（active-only 看板 + 拖入/拖出显示） | ✅ |
+| 新建会话目录选择器（浏览 + 新建文件夹，跨平台） | ✅ |
+| Phase 3 / 4剩余 / 5 / 6剩余 / 7 / 8 | ⬜ |
+
+每个阶段落地时在关键节点补 **冒烟测试 + 用例测试** 保证鲁棒性。
+
+### Phase 3 — Hook 集成（实时事实层）
+
+**为什么**：现状 `SessionStatus::infer()` 全靠「距上次活动多久」猜，区分不了「等输入(waiting)」和「闲着(idle)」，长工具运行也可能被误判。CC 官方 hook 是唯一能拿到「此刻确切在干什么」的信号。
+
+**做什么**
+1. **hook 脚本**（`hooks/ccbridge-hook.mjs`，Node，跨平台）：`SessionStart/UserPromptSubmit/PreToolUse/PostToolUse/Notification/Stop` 时从 stdin 取 `session_id/tool`，`POST /api/hook`。daemon 未启动则静默失败，绝不阻塞 CC。
+2. **daemon 接收端** `/api/hook`：每会话维护 hook 事实（状态 + 时间 + 当前工具）。状态判定改为「hook 优先、时间兜底」：`Pre/PostToolUse/UserPromptSubmit→working`、`Notification/Stop/SessionStart→waiting`；Working 事实 120s 内粘滞、Waiting 30min 后回落 idle。
+3. **自动配置器** CLI：`ccbridge install-hooks` / `uninstall-hooks`——备份 `settings.json` → 幂等注入带标记的 hook 块 → 一键完整还原（程序化增删，可逆）。绝不动用户已有 hook。
+4. **实时动作流事件**：hook 事件经现有 WS 广播（`type:"hook"`），为 Phase 5 供数据源。
+
+**目标**：状态从「猜」变「准」；拿到实时工具流；装/卸零心智负担。
+
+**验收标准**
+- 真实会话执行任务时，工具执行瞬间 working、停下 waiting/idle，延迟 <2s，不再误判。
+- `install-hooks` 后 settings.json 有备份，`uninstall-hooks` 后与原始 diff 为空；用户原有 hook 不受影响。
+- 前端能实时看到「某会话正在调用 X 工具」。
+- daemon 未启动时 hook 静默失败，CC 正常可用。
+- **测试**：core 单测（HookKind 解析 / 状态 resolve 粘滞与回落）；配置器单测（install→uninstall 还原、二次 install 幂等）；daemon HTTP 冒烟（health/hook/stats）。
+
+### Phase 4（剩余）— 信息架构：inactive / history 分类
+
+**为什么**：现在只有「active + 手动拖入」两态，非激活会话只能去任务栏翻，缺清晰可持久化的三态归类。
+
+**做什么**
+1. **三态**：active（自动）、inactive（idle 近期/手动拉入）、history（长期未活动/手动归档），前端可切换 tab。
+2. **拖拽归类** 结果持久化（localStorage，后续可升级 daemon 端）。
+3. **搜索增强**：扩展到全部会话（当前被限制在 active∪已显示）。
+
+**目标**：会话再多也有序，分类稳定不丢。
+
+**验收标准**
+- 三态 tab 各显示对应会话；拖到 history 后刷新仍在 history。
+- 搜索能跨全部会话命中。
+- 20+ 会话下清晰无卡顿。
+- **测试**：归类/持久化 reducer 单测；搜索过滤单测；关键交互 E2E 冒烟。
+
+### Phase 5 — 像素风实时动作流视图
+
+**为什么**：Phase 3 产出实时工具流，但目前只有进终端才看得到；给 active 卡片一个「一眼看懂在干嘛」的聚合视图。
+
+**做什么**
+1. **消费** Phase 3 WS 事件，为每个 active 会话渲染动作流：当前工具（名+参数摘要）、输出滚动、耗时。
+2. **视觉**：等宽、扫描线/像素质感、打字机滚动，呼应 CC 终端。
+3. **性能**：节流 + 虚拟滚动，只渲染可见 active 卡片。
+
+**目标**：不进终端就能实时感知每个 active agent 在做什么。
+
+**验收标准**
+- 会话运行时卡片实时滚动「调用 X → 输出 → 下一步」，延迟 <1s。
+- 多会话活跃时帧率稳定无明显掉帧。
+- 视觉与暖色系一致、有像素风质感。
+- **测试**：事件归约/节流单测；渲染冒烟（挂载不崩、事件驱动更新）。
+
+### Phase 6（剩余）异步信箱 + MCP · Phase 7 TUI(ratatui) · Phase 8 打包+文档+测试
+
+（详见 §6.5 修订执行顺序；直接交互已由 PTY 托管解决，Phase 6 聚焦跨会话通信。）
+
 ## 7. 设计风格（参考 Claude Code 配色）
 
 - **隐喻**：指挥中心 / 任务管理器。agent = 状态卡，按项目编组。

@@ -1,6 +1,7 @@
 //! HTTP + WebSocket API。
 use crate::store::Store;
 use crate::supervisor::Supervisor;
+use ccbridge_core::HookKind;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -30,6 +31,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/sessions", get(list_sessions))
         .route("/api/sessions/:id", get(get_session))
         .route("/api/stats", get(get_stats))
+        .route("/api/hook", post(post_hook))
         .route("/ws", get(ws_handler))
         // PTY 托管
         .route("/api/managed", get(list_managed))
@@ -76,6 +78,44 @@ async fn get_session(State(s): State<AppState>, AxPath(id): AxPath<String>) -> i
 async fn get_stats(State(s): State<AppState>) -> impl IntoResponse {
     let stats = s.store.read().unwrap().stats();
     Json(stats)
+}
+
+// ---------- Hook 上报（Phase 3） ----------
+
+#[derive(Deserialize)]
+struct HookReq {
+    session_id: String,
+    event: String,
+    #[serde(default)]
+    tool: Option<String>,
+}
+
+/// POST /api/hook — CC hook 脚本上报实时事件；更新状态并经 WS 广播动作流。
+async fn post_hook(State(s): State<AppState>, Json(req): Json<HookReq>) -> impl IntoResponse {
+    let Some(kind) = HookKind::parse(&req.event) else {
+        // 未知事件：忽略但不报错，避免 hook 脚本因 4xx 噪声
+        return StatusCode::NO_CONTENT;
+    };
+    if req.session_id.trim().is_empty() {
+        return StatusCode::NO_CONTENT;
+    }
+    let status = kind.implied_status();
+    s.store
+        .write()
+        .unwrap()
+        .record_hook(&req.session_id, status, req.tool.clone());
+
+    let msg = serde_json::json!({
+        "type": "hook",
+        "session_id": req.session_id,
+        "event": kind.event_name(),
+        "tool": req.tool,
+        "status": status,
+    })
+    .to_string();
+    let _ = s.tx.send(msg);
+
+    StatusCode::NO_CONTENT
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(s): State<AppState>) -> impl IntoResponse {
@@ -309,5 +349,80 @@ async fn fs_mkdir(Json(req): Json<MkdirReq>) -> impl IntoResponse {
     match std::fs::create_dir_all(&full) {
         Ok(_) => Json(serde_json::json!({ "path": full.to_string_lossy() })).into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, format!("创建失败: {e}")).into_response(),
+    }
+}
+
+// ---------- HTTP 冒烟测试（Phase 3） ----------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::{to_bytes, Body};
+    use axum::http::Request;
+    use tower::ServiceExt; // for `oneshot`
+
+    fn test_state() -> AppState {
+        let store = Arc::new(RwLock::new(Store::new()));
+        let (tx, _rx) = broadcast::channel(16);
+        AppState {
+            store,
+            tx,
+            sup: Arc::new(Supervisor::new()),
+        }
+    }
+
+    #[tokio::test]
+    async fn health_returns_ok() {
+        let res = router(test_state())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(&body[..], b"ok");
+    }
+
+    #[tokio::test]
+    async fn hook_accepts_valid_and_ignores_unknown() {
+        let app = router(test_state());
+        let good = Request::builder()
+            .method("POST")
+            .uri("/api/hook")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"session_id":"s1","event":"PreToolUse","tool":"Bash"}"#,
+            ))
+            .unwrap();
+        let res = app.clone().oneshot(good).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+        // 未知事件仍 204，避免给 hook 脚本制造 4xx 噪声
+        let bad = Request::builder()
+            .method("POST")
+            .uri("/api/hook")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"session_id":"s1","event":"Bogus"}"#))
+            .unwrap();
+        let res2 = app.oneshot(bad).await.unwrap();
+        assert_eq!(res2.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn stats_returns_json_ok() {
+        let res = router(test_state())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/stats")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
     }
 }

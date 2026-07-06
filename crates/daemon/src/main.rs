@@ -1,5 +1,6 @@
 //! ccbridge daemon：发现 + 解析 + 监控本地 Claude Code 会话，提供 HTTP/WS API。
 mod api;
+mod hooks_config;
 mod store;
 mod supervisor;
 mod watcher;
@@ -9,6 +10,22 @@ use tokio::sync::broadcast;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // CLI 子命令：install-hooks / uninstall-hooks（无需启动 daemon）
+    let arg1 = std::env::args().nth(1);
+    match arg1.as_deref() {
+        Some("install-hooks") => return hooks_config::install(),
+        Some("uninstall-hooks") => return hooks_config::uninstall(),
+        Some("--help") | Some("-h") => {
+            println!("ccbridge — 本地 Claude Code 会话指挥中心");
+            println!("用法:");
+            println!("  ccbridge                 启动 daemon (默认 127.0.0.1:7878)");
+            println!("  ccbridge install-hooks   注入 CC hook 以获取精确实时状态");
+            println!("  ccbridge uninstall-hooks 移除已注入的 hook");
+            return Ok(());
+        }
+        _ => {}
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

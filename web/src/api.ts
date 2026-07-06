@@ -24,7 +24,8 @@ export function connectWs(onUpdate: () => void): () => void {
     ws.onmessage = (e) => {
       try {
         const m = JSON.parse(e.data);
-        if (m.type === 'update') onUpdate();
+        // 文件变更或 hook 事件都触发刷新（hook → 实时精确状态）
+        if (m.type === 'update' || m.type === 'hook') onUpdate();
       } catch {
         /* ignore */
       }

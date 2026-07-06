@@ -5,9 +5,20 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
 
+/// 由 hook 上报的会话实时事实（Phase 3）。
+#[derive(Debug, Clone)]
+pub struct HookFact {
+    pub status: SessionStatus,
+    pub ts: i64, // epoch 秒
+    #[allow(dead_code)] // Phase 5 动作流视图消费
+    pub tool: Option<String>, // 当前/最近工具名
+}
+
 pub struct Store {
     /// key = jsonl 文件路径（一个文件对应一个会话）。
     sessions: HashMap<String, ParsedSession>,
+    /// key = sessionId → 最近一次 hook 事实。
+    hooks: HashMap<String, HookFact>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -53,7 +64,20 @@ impl Store {
     pub fn new() -> Self {
         Self {
             sessions: HashMap::new(),
+            hooks: HashMap::new(),
         }
+    }
+
+    /// 记录一条 hook 事实（覆盖该会话的上一条）。
+    pub fn record_hook(&mut self, session_id: &str, status: SessionStatus, tool: Option<String>) {
+        self.hooks.insert(
+            session_id.to_string(),
+            HookFact {
+                status,
+                ts: Utc::now().timestamp(),
+                tool,
+            },
+        );
     }
 
     pub fn reload_file(&mut self, path: &Path) {
@@ -83,13 +107,16 @@ impl Store {
         self.sessions.len()
     }
 
-    fn refresh_status(s: &SessionSummary) -> SessionStatus {
+    /// 当前状态：hook 事实优先，时间启发式兜底。
+    fn status_of(&self, s: &SessionSummary) -> SessionStatus {
+        let now = Utc::now().timestamp();
         let secs = if s.last_active_epoch > 0 {
-            Utc::now().timestamp() - s.last_active_epoch
+            now - s.last_active_epoch
         } else {
             -1
         };
-        SessionStatus::infer(secs, s.had_error)
+        let hook = self.hooks.get(&s.id).map(|h| (h.status, now - h.ts));
+        SessionStatus::resolve(hook, secs)
     }
 
     /// 会话摘要列表，按最近活动倒序；status 用当前时间即时重算。
@@ -99,7 +126,7 @@ impl Store {
             .values()
             .map(|ps| {
                 let mut s = ps.summary.clone();
-                s.status = Self::refresh_status(&s);
+                s.status = self.status_of(&s);
                 s
             })
             .collect();
@@ -113,7 +140,7 @@ impl Store {
             .find(|ps| ps.summary.id == id)
             .map(|ps| {
                 let mut d = ps.clone().into_detail();
-                d.summary.status = Self::refresh_status(&d.summary);
+                d.summary.status = self.status_of(&d.summary);
                 d
             })
     }
@@ -139,7 +166,7 @@ impl Store {
             let s = &ps.summary;
             total_cost += s.usage.cost_usd;
 
-            let status = Self::refresh_status(s);
+            let status = self.status_of(s);
             match status {
                 SessionStatus::Working => {
                     status_counts.working += 1;
@@ -224,4 +251,66 @@ fn day_key(epoch: i64) -> String {
         .single()
         .map(|dt| dt.format("%Y-%m-%d").to_string())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ccbridge_core::{SessionSummary, UsageTotals};
+
+    fn fake_session(id: &str, last_active_epoch: i64) -> ParsedSession {
+        let summary = SessionSummary {
+            id: id.to_string(),
+            project_path: "/tmp/proj".to_string(),
+            project_name: "proj".to_string(),
+            title: None,
+            model: None,
+            status: SessionStatus::Unknown,
+            started_at: None,
+            last_active_at: None,
+            last_active_epoch,
+            had_error: false,
+            message_count: 1,
+            tool_count: 0,
+            usage: UsageTotals::default(),
+            git_branch: None,
+            file: format!("/tmp/{id}.jsonl"),
+        };
+        ParsedSession {
+            summary,
+            recent_tools: vec![],
+            recent_messages: vec![],
+            ticks: vec![],
+        }
+    }
+
+    #[test]
+    fn hook_overrides_stale_time_status() {
+        let mut store = Store::new();
+        // 会话文件很久没动 → 时间启发式会判 idle
+        let old = Utc::now().timestamp() - 100_000;
+        store
+            .sessions
+            .insert("f1".to_string(), fake_session("s1", old));
+
+        // 无 hook：idle
+        let before = store.summaries();
+        assert_eq!(before[0].status, SessionStatus::Idle);
+
+        // 收到 PreToolUse hook → working（覆盖时间判断）
+        store.record_hook("s1", SessionStatus::Working, Some("Bash".into()));
+        let after = store.summaries();
+        assert_eq!(after[0].status, SessionStatus::Working);
+
+        // 统计里也应计入 active
+        assert_eq!(store.stats().active_sessions, 1);
+    }
+
+    #[test]
+    fn hook_for_unknown_session_is_harmless() {
+        let mut store = Store::new();
+        store.record_hook("ghost", SessionStatus::Working, None);
+        assert_eq!(store.summaries().len(), 0);
+        assert_eq!(store.stats().total_sessions, 0);
+    }
 }
