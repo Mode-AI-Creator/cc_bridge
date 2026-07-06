@@ -1,4 +1,5 @@
-import type { SessionSummary, SessionDetail, Stats } from './types';
+import type { SessionSummary, SessionDetail, Stats, SessionStatus } from './types';
+import type { DiskTheme } from './lib/skins';
 
 async function json<T>(url: string): Promise<T> {
   const r = await fetch(url);
@@ -10,6 +11,32 @@ export const getSessions = () => json<SessionSummary[]>('/api/sessions');
 export const getStats = () => json<Stats>('/api/stats');
 export const getDetail = (id: string) =>
   json<SessionDetail>(`/api/sessions/${encodeURIComponent(id)}`);
+
+export const getThemes = () => json<DiskTheme[]>('/api/themes');
+
+/** 上传单个状态资产（读为 base64 后 POST）。 */
+export async function uploadThemeAsset(
+  theme: string,
+  state: SessionStatus,
+  file: File,
+): Promise<void> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = () => reject(fr.error);
+    fr.readAsDataURL(file);
+  });
+  const data_base64 = dataUrl.split(',')[1] || '';
+  const r = await fetch(
+    `/api/themes/${encodeURIComponent(theme)}/asset/${state}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: file.name, data_base64 }),
+    },
+  );
+  if (!r.ok) throw new Error(await r.text());
+}
 
 /**
  * 连接 daemon WebSocket；断线自动重连。

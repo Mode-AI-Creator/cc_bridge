@@ -41,6 +41,10 @@ pub fn router(state: AppState) -> Router {
         // 文件系统浏览（新建会话选目录）
         .route("/api/fs/list", get(fs_list))
         .route("/api/fs/mkdir", post(fs_mkdir))
+        // 吉祥物换肤主题
+        .route("/api/themes", get(list_themes))
+        .route("/api/themes/:name/asset/:state", get(get_theme_asset))
+        .route("/api/themes/:name/asset/:state", post(upload_theme_asset))
         .with_state(state)
         .layer(CorsLayer::permissive())
 }
@@ -352,6 +356,47 @@ async fn fs_mkdir(Json(req): Json<MkdirReq>) -> impl IntoResponse {
     }
 }
 
+// ---------- 吉祥物换肤主题 ----------
+
+async fn list_themes() -> impl IntoResponse {
+    Json(crate::themes::list_themes())
+}
+
+/// GET /api/themes/:name/asset/:state — 返回资产字节。
+async fn get_theme_asset(AxPath((name, state)): AxPath<(String, String)>) -> impl IntoResponse {
+    match crate::themes::read_asset(&name, &state) {
+        Some((bytes, ct)) => (
+            [(axum::http::header::CONTENT_TYPE, ct)],
+            bytes,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "无此资产").into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct UploadReq {
+    filename: String,
+    /// base64 编码的资产字节。
+    data_base64: String,
+}
+
+/// POST /api/themes/:name/asset/:state — 上传单个状态资产（base64）。
+async fn upload_theme_asset(
+    AxPath((name, state)): AxPath<(String, String)>,
+    Json(req): Json<UploadReq>,
+) -> impl IntoResponse {
+    use base64::Engine;
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(req.data_base64.as_bytes()) {
+        Ok(b) => b,
+        Err(_) => return (StatusCode::BAD_REQUEST, "base64 解码失败".to_string()).into_response(),
+    };
+    match crate::themes::write_asset(&name, &state, &req.filename, &bytes) {
+        Ok(fname) => Json(serde_json::json!({ "file": fname })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+    }
+}
+
 // ---------- HTTP 冒烟测试（Phase 3） ----------
 
 #[cfg(test)]
@@ -424,5 +469,34 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn themes_list_ok() {
+        let res = router(test_state())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/themes")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn theme_upload_rejects_bad_format() {
+        // .bmp 非白名单 → 400
+        let bad = Request::builder()
+            .method("POST")
+            .uri("/api/themes/myskin/asset/idle")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"filename":"x.bmp","data_base64":"AAAA"}"#,
+            ))
+            .unwrap();
+        let res = router(test_state()).oneshot(bad).await.unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 }

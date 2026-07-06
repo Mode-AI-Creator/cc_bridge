@@ -3,19 +3,32 @@ import type { SessionDetail } from '../types';
 import { getDetail } from '../api';
 import { fmtCost, fmtTokens, shortModel, STATUS_LABEL } from '../lib/format';
 import { ClawdSprite } from './ClawdSprite';
+import { SkinPicker } from './SkinPicker';
+import { type DiskTheme, assetUrl, resolveSkin } from '../lib/skins';
 import type { ActionEvent } from '../lib/actions';
 
 export function DetailPane({
   id,
   liveActions = [],
+  skin,
+  themes,
+  themeVersion,
+  onPickSkin,
+  onReloadThemes,
 }: {
   id: string | null;
   liveActions?: ActionEvent[];
+  skin: string;
+  themes: DiskTheme[];
+  themeVersion: number;
+  onPickSkin: (name: string) => void;
+  onReloadThemes: () => void;
 }) {
   const [d, setD] = useState<SessionDetail | null>(null);
   const [showClawd, setShowClawd] = useState(
     () => localStorage.getItem('ccbridge.clawd') !== '0',
   );
+  const [picking, setPicking] = useState(false);
   const toggleClawd = () =>
     setShowClawd((v) => {
       localStorage.setItem('ccbridge.clawd', v ? '0' : '1');
@@ -86,6 +99,15 @@ export function DetailPane({
       <div className="section-title">
         {showClawd ? 'Clawd' : '工具调用'}
         <span className="muted">· {d.tool_count}</span>
+        {showClawd && (
+          <button
+            className="clawd-toggle"
+            onClick={() => setPicking((v) => !v)}
+            title="换肤"
+          >
+            🎨
+          </button>
+        )}
         <button
           className="clawd-toggle"
           onClick={toggleClawd}
@@ -95,14 +117,35 @@ export function DetailPane({
         </button>
       </div>
       {showClawd ? (
-        <div className="clawd-stage">
-          <ClawdSprite status={d.status} />
-          <div className="clawd-caption">
-            {liveActions.length && liveActions[liveActions.length - 1].tool
-              ? `正在 · ${liveActions[liveActions.length - 1].tool}`
-              : STATUS_LABEL[d.status]}
+        picking ? (
+          <SkinPicker
+            skin={skin}
+            themes={themes}
+            onPick={onPickSkin}
+            onClose={() => setPicking(false)}
+            onUploaded={onReloadThemes}
+          />
+        ) : (
+          <div className="clawd-stage">
+            {(() => {
+              const r = resolveSkin(skin, themes, d.status);
+              return r.kind === 'image' ? (
+                <img
+                  className="clawd-cv"
+                  src={assetUrl(skin, d.status, themeVersion)}
+                  alt={d.status}
+                />
+              ) : (
+                <ClawdSprite status={d.status} />
+              );
+            })()}
+            <div className="clawd-caption">
+              {liveActions.length && liveActions[liveActions.length - 1].tool
+                ? `正在 · ${liveActions[liveActions.length - 1].tool}`
+                : STATUS_LABEL[d.status]}
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <div className="tool-scroll">
           {d.recent_tools.length === 0 && <div className="muted sm">无</div>}

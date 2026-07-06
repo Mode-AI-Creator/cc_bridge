@@ -23,6 +23,7 @@ portable-pty = "0.8"
 futures-util = "0.3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "5"
+base64 = "0.22"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

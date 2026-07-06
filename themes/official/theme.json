@@ -1,0 +1,7 @@
+{
+  "name": "official",
+  "label": "官方 Clawd（需自备资产）",
+  "author": "Anthropic (artwork, rights reserved)",
+  "states": ["idle", "working", "waiting", "error", "unknown"],
+  "note": "把官方 Clawd 像素资产按 <state>.<ext> 命名放入 ~/.claude/ccbridge/themes/official/"
+}

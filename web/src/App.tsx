@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { SessionSummary, Stats } from './types';
-import { getSessions, getStats, connectWs } from './api';
+import { getSessions, getStats, getThemes, connectWs } from './api';
+import { type DiskTheme, loadSkin, saveSkin } from './lib/skins';
 import { StatsBar } from './components/StatsBar';
 import { TaskBar } from './components/TaskBar';
 import { SessionList } from './components/SessionList';
@@ -86,7 +87,23 @@ export function App() {
   const [overrides, setOverrides] = useState<Record<string, Bucket>>(loadBuckets);
   const [tab, setTab] = useState<Bucket>('active');
   const [actions, setActions] = useState<Record<string, ActionEvent[]>>({});
+  const [skin, setSkin] = useState<string>(loadSkin);
+  const [themes, setThemes] = useState<DiskTheme[]>([]);
+  const [themeVersion, setThemeVersion] = useState(0);
   const [newModalOpen, setNewModalOpen] = useState(false);
+
+  const reloadThemes = () => {
+    getThemes()
+      .then((t) => {
+        setThemes(t);
+        setThemeVersion((v) => v + 1); // 触发资产 URL cache-bust
+      })
+      .catch(() => {});
+  };
+  const pickSkin = (name: string) => {
+    setSkin(name);
+    saveSkin(name);
+  };
   const [lastCwd, setLastCwd] = useState(loadLastCwd);
 
   // 可调节面板尺寸
@@ -111,6 +128,7 @@ export function App() {
 
   useEffect(() => {
     load();
+    reloadThemes();
     const stop = connectWs(load, (p) =>
       setActions((a) => pushAction(a, p as never)),
     );
@@ -285,6 +303,11 @@ export function App() {
           <DetailPane
             id={selectedId}
             liveActions={selectedId ? actions[selectedId] || [] : []}
+            skin={skin}
+            themes={themes}
+            themeVersion={themeVersion}
+            onPickSkin={pickSkin}
+            onReloadThemes={reloadThemes}
           />
         </div>
         <VResizer onResize={(dx) => setSidebarW((w) => clamp(w + dx, 280, 760))} />

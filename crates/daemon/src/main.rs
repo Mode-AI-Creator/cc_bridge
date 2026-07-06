@@ -3,6 +3,7 @@ mod api;
 mod hooks_config;
 mod store;
 mod supervisor;
+mod themes;
 mod watcher;
 
 use std::sync::{Arc, RwLock};
