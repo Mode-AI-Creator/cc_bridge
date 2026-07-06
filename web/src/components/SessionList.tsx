@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { SessionSummary } from '../types';
 import { fmtCost, relTime } from '../lib/format';
+import { type Bucket, BUCKETS, BUCKET_LABEL } from '../lib/classify';
 
 const PROJECT_MIME = 'application/x-ccbridge-project';
 const SESSION_MIME = 'application/x-ccbridge-session';
@@ -13,10 +14,12 @@ export function SessionList({
   onRename,
   query,
   setQuery,
+  tab,
+  setTab,
+  counts,
+  bucketFor,
+  onReclassify,
   onDropProjectCwd,
-  onAddSession,
-  onRemove,
-  activeProjectName,
 }: {
   sessions: SessionSummary[];
   selectedId: string | null;
@@ -25,14 +28,18 @@ export function SessionList({
   onRename: (id: string, newName: string) => void;
   query: string;
   setQuery: (q: string) => void;
+  tab: Bucket;
+  setTab: (b: Bucket) => void;
+  counts: Record<Bucket, number>;
+  bucketFor: (s: SessionSummary) => Bucket;
+  onReclassify: (id: string, bucket: Bucket) => void;
   onDropProjectCwd: (cwd: string) => void;
-  onAddSession: (id: string) => void;
-  onRemove: (id: string) => void;
-  activeProjectName: string | null;
 }) {
   const [dragOver, setDragOver] = useState(false);
+  const [overTab, setOverTab] = useState<Bucket | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const searching = query.trim().length > 0;
   const list = [...sessions].sort((a, b) => b.last_active_epoch - a.last_active_epoch);
 
   const startEdit = (id: string, cur: string) => {
@@ -44,12 +51,14 @@ export function SessionList({
     setEditing(null);
   };
 
+  const acceptsDrag = (types: readonly string[]) =>
+    types.includes(PROJECT_MIME) || types.includes(SESSION_MIME);
+
   return (
     <div
       className={`session-list ${dragOver ? 'drop' : ''}`}
       onDragOver={(e) => {
-        const t = e.dataTransfer.types;
-        if (t.includes(PROJECT_MIME) || t.includes(SESSION_MIME)) {
+        if (acceptsDrag(e.dataTransfer.types)) {
           e.preventDefault();
           setDragOver(true);
         }
@@ -60,7 +69,7 @@ export function SessionList({
         setDragOver(false);
         const sid = e.dataTransfer.getData(SESSION_MIME);
         if (sid) {
-          onAddSession(sid);
+          onReclassify(sid, tab); // 拖到列表 → 归入当前 tab
           return;
         }
         const cwd = e.dataTransfer.getData(PROJECT_MIME);
@@ -68,21 +77,52 @@ export function SessionList({
       }}
     >
       <div className="list-head">
-        <span className="list-title">
-          CC Sessions
-          {activeProjectName && <span className="list-filter">· {activeProjectName}</span>}
-        </span>
+        <span className="list-title">CC Sessions</span>
         <input
           className="search-sm"
-          placeholder="过滤…"
+          placeholder="搜索全部会话…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
+
+      <div className="bucket-tabs">
+        {BUCKETS.map((b) => (
+          <button
+            key={b}
+            className={`bucket-tab ${tab === b ? 'sel' : ''} ${overTab === b ? 'over' : ''}`}
+            onClick={() => setTab(b)}
+            title={`拖会话到此归入「${BUCKET_LABEL[b]}」`}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes(SESSION_MIME)) {
+                e.preventDefault();
+                setOverTab(b);
+              }
+            }}
+            onDragLeave={() => setOverTab((cur) => (cur === b ? null : cur))}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setOverTab(null);
+              setDragOver(false);
+              const sid = e.dataTransfer.getData(SESSION_MIME);
+              if (sid) onReclassify(sid, b);
+            }}
+          >
+            {BUCKET_LABEL[b]}
+            <span className="bucket-count">{counts[b]}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="list-body">
         {list.length === 0 && (
           <div className="list-empty">
-            暂无激活会话 · 从左侧任务栏拖会话到此处显示
+            {searching
+              ? '无匹配会话'
+              : tab === 'active'
+                ? '暂无激活会话 · 从任务栏拖会话到此或切换标签'
+                : '此分类为空 · 拖会话到标签归类'}
           </div>
         )}
         {list.map((s) => {
@@ -96,10 +136,6 @@ export function SessionList({
               onDragStart={(e) => {
                 e.dataTransfer.setData(SESSION_MIME, s.id);
                 e.dataTransfer.effectAllowed = 'move';
-              }}
-              onDragEnd={(e) => {
-                // 拖出容器（未落在有效放置区）→ 移出
-                if (e.dataTransfer.dropEffect === 'none') onRemove(s.id);
               }}
               onClick={() => !isEditing && onSelect(s.id)}
             >
@@ -134,7 +170,12 @@ export function SessionList({
                     {name}
                   </span>
                 )}
-                <span className="sess-proj">{s.project_name}</span>
+                <span className="sess-proj">
+                  {s.project_name}
+                  {searching && (
+                    <span className="sess-bucket-tag">{BUCKET_LABEL[bucketFor(s)]}</span>
+                  )}
+                </span>
               </div>
               {!isEditing && (
                 <>
@@ -159,7 +200,7 @@ export function SessionList({
         })}
       </div>
       <div className={`drop-hint ${dragOver ? 'show' : ''}`}>
-        放下会话以显示 · 项目则新建会话
+        放会话到标签归类 · 放项目则新建会话
       </div>
     </div>
   );

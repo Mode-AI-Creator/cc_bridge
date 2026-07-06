@@ -8,6 +8,13 @@ import { DetailPane } from './components/DetailPane';
 import { ChatPane, type ChatEntry } from './components/ChatPane';
 import { NewSessionModal } from './components/NewSessionModal';
 import { loadRenames, saveRenames } from './lib/renames';
+import {
+  type Bucket,
+  bucketOf,
+  matchesQuery,
+  loadBuckets,
+  saveBuckets,
+} from './lib/classify';
 
 // 记住上次新建会话的目录（跨平台，空则从驱动器/根开始浏览）
 const loadLastCwd = () => localStorage.getItem('ccbridge.lastCwd') || '';
@@ -75,7 +82,8 @@ export function App() {
   const [query, setQuery] = useState('');
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [renames, setRenames] = useState<Record<string, string>>(loadRenames);
-  const [shownIds, setShownIds] = useState<Set<string>>(new Set());
+  const [overrides, setOverrides] = useState<Record<string, Bucket>>(loadBuckets);
+  const [tab, setTab] = useState<Bucket>('active');
   const [newModalOpen, setNewModalOpen] = useState(false);
   const [lastCwd, setLastCwd] = useState(loadLastCwd);
 
@@ -109,37 +117,36 @@ export function App() {
     };
   }, []);
 
-  const isActive = (s: SessionSummary) =>
-    s.status === 'working' || s.status === 'waiting';
+  // 会话归类（用户覆盖优先，否则按状态+活动推断）
+  const bucketFor = (s: SessionSummary) => bucketOf(s, overrides);
 
-  const addShown = (id: string) => setShownIds((prev) => new Set(prev).add(id));
-  const removeShown = (id: string) =>
-    setShownIds((prev) => {
-      const n = new Set(prev);
-      n.delete(id);
-      return n;
+  const reclassify = (id: string, bucket: Bucket) =>
+    setOverrides((prev) => {
+      const next = { ...prev, [id]: bucket };
+      saveBuckets(next);
+      return next;
     });
 
-  // 中间列表：默认只显示激活中的会话 + 用户从任务栏拖入的会话
+  // 三态计数
+  const counts = useMemo(() => {
+    const c: Record<Bucket, number> = { active: 0, inactive: 0, history: 0 };
+    for (const s of sessions) c[bucketOf(s, overrides)]++;
+    return c;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, overrides]);
+
+  // 中间列表：有搜索词 → 跨全部会话；否则 → 当前 tab 的会话
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sessions.filter((s) => {
-      if (!(isActive(s) || shownIds.has(s.id))) return false;
       if (activeProject && s.project_path !== activeProject) return false;
-      if (!q) return true;
-      const name = (renames[s.id] || s.title || '').toLowerCase();
-      return (
-        s.project_name.toLowerCase().includes(q) ||
-        name.includes(q) ||
-        s.id.toLowerCase().includes(q)
-      );
+      if (q) return matchesQuery(s, q, renames);
+      return bucketOf(s, overrides) === tab;
     });
-  }, [sessions, query, activeProject, renames, shownIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, query, activeProject, renames, overrides, tab]);
 
   const selectedSession = sessions.find((s) => s.id === selectedId) || null;
-  const activeProjectName = activeProject
-    ? sessions.find((s) => s.project_path === activeProject)?.project_name || null
-    : null;
 
   const onRename = (id: string, newName: string) => {
     setRenames((prev) => {
@@ -259,10 +266,12 @@ export function App() {
             onRename={onRename}
             query={query}
             setQuery={setQuery}
+            tab={tab}
+            setTab={setTab}
+            counts={counts}
+            bucketFor={bucketFor}
+            onReclassify={reclassify}
             onDropProjectCwd={newSessionAt}
-            onAddSession={addShown}
-            onRemove={removeShown}
-            activeProjectName={activeProjectName}
           />
           <HResizer
             onResize={(dy) =>

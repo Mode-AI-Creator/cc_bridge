@@ -456,6 +456,61 @@ body {
   border-color: var(--accent);
   width: 140px;
 }
+.bucket-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px 4px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.bucket-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  padding: 5px 6px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.bucket-tab:hover {
+  color: var(--text);
+}
+.bucket-tab.sel {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.bucket-tab.over {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: var(--accent-soft);
+}
+.bucket-count {
+  min-width: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  background: var(--surface-3);
+  border-radius: 999px;
+  padding: 0 5px;
+}
+.bucket-tab.sel .bucket-count {
+  color: var(--accent);
+}
+.sess-bucket-tag {
+  margin-left: 6px;
+  font-size: 0.66rem;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 5px;
+}
 .list-body {
   flex: 1;
   overflow-y: auto;
