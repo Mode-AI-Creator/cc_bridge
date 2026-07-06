@@ -180,9 +180,84 @@ last-prompt / mode / permission-mode / ai-title / queue-operation`。
 - 视觉与暖色系一致、有像素风质感。
 - **测试**：事件归约/节流单测；渲染冒烟（挂载不崩、事件驱动更新）。
 
-### Phase 6（剩余）异步信箱 + MCP · Phase 7 TUI(ratatui) · Phase 8 打包+文档+测试
+### Phase 6 — 异步信箱 + MCP（跨会话通信）· 实施拆解
 
-（详见 §6.5 修订执行顺序；直接交互已由 PTY 托管解决，Phase 6 聚焦跨会话通信。）
+**一句话**：让不同 CC 会话的 agent 互相发消息、共享笔记。直接交互已由 PTY 解决，本阶段专注 agent 间异步协作。
+
+**接入点（已确认）**：`AppState{store,tx,sup}`；`sup.write_input(&[u8])` 可做 urgent 注入；`tx` WS 广播作消息总线；store 内存，mailbox 同构。
+
+**数据模型（core，纯逻辑可测）**
+```
+Message    { id, from, to, body, created_at, read_at: Option<i64> }
+SharedNote { key, body, author, updated_at }
+Mailbox    { inboxes: Map<session_id, Vec<Message>>, notes: Map<key, SharedNote> }
+```
+纯函数 `send / unread / mark_read / note_upsert / note_get` 全部单测。
+
+**关键前提（决定整套设计）**：MCP server 跑在某 CC 会话内，如何知道"我是哪个会话"？CC 是否经环境变量/初始化上下文传 `session_id`？能拿到→用真实 id；拿不到→**别名机制兜底**（`register(alias)`）。连同 rmcp 最新 stdio API，均在 **Step 0 先确认**。
+
+**分步（每步 build + test + commit）**
+- **S0 研究**：context7 核对 rmcp stdio API；确认 CC 传 `session_id` 机制；定形态＝`ccbridge mcp` 子命令(stdio)，内部 HTTP 回连 daemon → MCP 是薄客户端，真相在 daemon。
+- **S1 mailbox+REST（最小可测闭环）**：core 模型+纯逻辑+单测；daemon `Mailbox`(Arc<RwLock>) 挂进 AppState；API `POST /api/inbox/send`、`GET /api/inbox/:session?unread=1`、`POST /api/inbox/:session/read/:msgId`、`POST/GET /api/notes`、`GET /api/sessions/search?q=`；WS 广播 `{type:"inbox"}`；测试 mailbox 单测 + HTTP 冒烟。
+- **S2 投递**：默认拉取；`urgent:true` 且 to 为活着的托管会话 → `sup.write_input` 注入一行提示（换行包裹、全局开关）；测试 urgent→write_input。
+- **S3 MCP server**：`ccbridge mcp`(rmcp stdio) 暴露 `inbox_read/send_to_session/reply/shared_note_write/shared_note_read/search_other_sessions/list_sessions`，每工具＝HTTP 调 daemon；配置器可选写入 settings.json `mcpServers`；测试工具契约 + 端到端。
+- **S4 前端消息总线**：Inbox 面板（WS 驱动跨会话消息流 + 未读徽标）；人工发消息（from＝`operator`）；卡片未读数；测试 reducer 单测 + 渲染冒烟。
+- **S5 打磨+文档**：别名机制；MCP 配置/工具/投递语义文档。
+
+**验收**：A `send_to_session(B,…)` → B `inbox_read` 读到；urgent 注入活着的托管 B；共享笔记跨会话可见；前端可见消息流 + 人工发；MCP 被 CC 正常加载；每步单测+冒烟全绿。
+
+**风险**：① MCP 拿不到 session_id（HIGH，S0 确认+别名兜底）② rmcp API 变动（MED，context7 核对）③ urgent 注入打断 agent（MED，仅 urgent+开关+换行）④ 内存 mailbox 重启丢失（LOW，后续 SQLite）。
+
+**里程碑**：`S0→S1(先可用)→S2→S3→S4→S5`；最小可用点在 S1 结束。
+
+## 6.7 通往 1.0 的路线图与工程 Gap 分析（可上架开源产品）
+
+> 愿景：Phase 6 为最后一个大**功能**版本；此后专注工程硬化与发布，打造可上架的开源产品 1.0。
+> 下面以专业前/后端工程视角盘点距 1.0 的欠缺，按 **P0（1.0 阻塞）/ P1（应做）/ P2（1.0 后）** 排序。当前功能已相当完整，欠的主要是**工程化、质量门槛、发布就绪**三块。
+
+### 后端 Gap
+| 优先级 | 项 | 现状 → 目标 |
+|---|---|---|
+| P0 | **持久化层** | 全内存，重启全量重扫；mailbox/选择散落 localStorage+磁盘 → 引入 SQLite（会话缓存、mailbox、配置统一），带 schema 版本化 |
+| P0 | **统一配置** | 端口/claude 路径/绑定地址靠散落 env → `~/.claude/ccbridge/config.toml` 统一，env 覆盖 |
+| P0 | **统一错误响应** | 有的返回纯文本、有的 JSON → 统一 error envelope + 状态码规范 |
+| P1 | **价格表可维护** | 内置静态会过期 → 可配置覆盖 + 版本标注 + 未知模型告警 |
+| P1 | **健壮性** | 缺优雅关闭、panic 恢复、启动自检；大 JSONL 启动同步解析或偏慢 → 并行/增量解析 + 基准 |
+| P1 | **安全威胁模型** | fs/list 任意读目录、spawn 命令面、上传——本地单用户可接受，但需 `SECURITY.md` 明确威胁模型 + 路径穿越审计 |
+| P2 | 多来源/远程 SSH | 明确 1.0 不做，标 future |
+
+### 前端 Gap
+| 优先级 | 项 | 现状 → 目标 |
+|---|---|---|
+| P0 | **错误/空/加载态** | 大量 `.catch(()=>{})` 静默吞 → React error boundary + 统一失败反馈 + 骨架/空态 |
+| P0 | **daemon 未连引导** | 后端没起时前端一片空 → 明确"daemon 未连接"引导 + 重连 |
+| P1 | **i18n（中英）** | 全中文硬编码 → 抽 i18n（至少 en/zh），上架面向国际 |
+| P1 | **a11y + reduced-motion** | 缺键盘导航/ARIA/焦点；精灵动画未尊重 `prefers-reduced-motion` → 补齐 |
+| P1 | **bundle 拆分** | ~500KB 未分割，xterm 重 → code-split + 懒加载终端 |
+| P1 | **状态管理** | `App.tsx` 巨型 useState 堆 → useReducer/context 或轻量 store，降耦合 |
+| P2 | 响应式/移动端 | 4 列工作台窄屏降级 |
+| P2 | CSS 模块化 | 单文件 1600+ 行 → 按组件拆分 |
+
+### 质量门槛 Gap（P0，上架前必须）
+- **CI**：GitHub Actions — build / test / lint(clippy+eslint) / `cargo audit` + `cargo deny`。
+- **测试补全**：现有 ~38 单测 → 加 daemon 集成测试、前端组件/交互测试、关键流程 **Playwright E2E**、覆盖率门槛。
+- **跨平台验证**：mac / Linux 实测 PTY、fs、claude 定位（目前仅 Windows 验证）。
+
+### 发布就绪 Gap（P0，上架前必须）
+- **打包分发**（原 Phase 8）：单二进制内嵌前端 + 跨平台 release + 安装脚本 + 包管理器（brew/scoop/`cargo install`）。
+- **文档全套**：`docs/`（安装/配置/hook/MCP/故障排查）、截图/GIF 演示、`CONTRIBUTING.md`、`SECURITY.md`、`CODE_OF_CONDUCT.md`、`CHANGELOG.md`。
+- **onboarding**：首次启动零配置体验 + 引导。
+- **合规**：`cargo deny` 许可审计；第三方美术（Clawd/月薪喵）不入库（已处理）；README 明确"零遥测/全本地"作为卖点。
+- **版本化**：语义版本 + CHANGELOG + release notes。
+
+### 建议的 1.0 里程碑编排
+- **M-A 功能收尾**：Phase 6（mailbox + MCP）。
+- **M-B 工程硬化**：后端 P0（SQLite/config/error envelope）+ 前端 P0（错误边界/未连引导）+ P1 择要（i18n/a11y/bundle）。
+- **M-C 质量门槛**：CI + 测试补全 + 跨平台验证（全 P0）。
+- **M-D 发布**：打包 + 文档全套 + onboarding + 合规（全 P0）→ **发布 1.0**。
+- **M-E 1.0 后**：TUI(ratatui)、远程/SSH、响应式、CSS 模块化等 P2。
+
+> 取舍原则：1.0 = **功能完整 + 工程可信 + 开箱即用**，不追求功能再扩张。TUI 从原"一等交付"调整为 **1.0 后**（M-E），因为对"可上架"而言，稳定性/文档/打包比再加一个前端更关键。
 
 ## 7. 设计风格（参考 Claude Code 配色）
 
