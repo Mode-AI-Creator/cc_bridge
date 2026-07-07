@@ -1,6 +1,7 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import type { SessionSummary, SessionDetail, ManagedInfo } from '../types';
 import { getDetail } from '../api';
+import { useI18n } from '../lib/i18n';
 
 // 懒加载终端：xterm 较重，仅在首次打开终端时才拉取其 chunk
 const TerminalView = lazy(() =>
@@ -34,6 +35,7 @@ export function ChatPane({
   onKillManaged: (id: string) => void;
   onResume: (s: SessionSummary) => void;
 }) {
+  const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const showIntro = activeChatId == null;
   const openIds = new Set(chats.map((c) => c.id));
@@ -46,7 +48,7 @@ export function ChatPane({
         <div className="chat-tabs-scroll">
           {chats.length === 0 && (
             <span className="chat-tabs-empty">
-              无进行中的对话 · 选会话「▶ 继续对话」或「＋ 新会话」
+              {t('chat.noChats')}
             </span>
           )}
           {chats.map((c) => (
@@ -78,14 +80,15 @@ export function ChatPane({
             onClick={() => setMenuOpen((v) => !v)}
             title="所有后台托管会话（刷新/收起后从这里重开）"
           >
-            运行中{managed.length > 0 ? ` ${managed.length}` : ''} ▾
+            {t('chat.running')}
+            {managed.length > 0 ? ` ${managed.length}` : ''} ▾
           </button>
           {menuOpen && (
             <>
               <div className="running-scrim" onClick={() => setMenuOpen(false)} />
               <div className="running-pop">
                 {managed.length === 0 && (
-                  <div className="running-empty">无托管会话</div>
+                  <div className="running-empty">{t('chat.noManaged')}</div>
                 )}
                 {managed.map((m) => {
                   const open = openIds.has(m.id);
@@ -103,7 +106,9 @@ export function ChatPane({
                         <span className="run-title">
                           {m.title || m.id.slice(0, 8)}
                         </span>
-                        <span className="run-state">{open ? '已打开' : '重开'}</span>
+                        <span className="run-state">
+                          {open ? t('chat.opened') : t('chat.reopen')}
+                        </span>
                       </button>
                       <button
                         className="running-kill"
@@ -127,7 +132,7 @@ export function ChatPane({
             key={c.id}
             className={`term-layer ${c.id === activeChatId ? 'active' : ''}`}
           >
-            <Suspense fallback={<div className="chat-empty">加载终端…</div>}>
+            <Suspense fallback={<div className="chat-empty">{t('chat.loadingTerm')}</div>}>
               <TerminalView id={c.id} />
             </Suspense>
           </div>
@@ -161,6 +166,7 @@ function ChatIntro({
   session: SessionSummary;
   onResume: () => void;
 }) {
+  const { t } = useI18n();
   const [d, setD] = useState<SessionDetail | null>(null);
   useEffect(() => {
     let on = true;
@@ -179,7 +185,7 @@ function ChatIntro({
         <h3>{session.title || session.id.slice(0, 8)}</h3>
         <div className="spacer" />
         <button className="primary-btn" onClick={onResume}>
-          ▶ 继续对话
+          {t('chat.resume')}
         </button>
       </div>
       <div className="chat-history">
