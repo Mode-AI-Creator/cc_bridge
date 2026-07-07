@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../lib/i18n';
 
 interface DirEntry {
   name: string;
@@ -28,6 +29,7 @@ export function NewSessionModal({
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [folderName, setFolderName] = useState('');
+  const { t } = useI18n();
 
   const browse = async (p: string) => {
     setError('');
@@ -93,8 +95,8 @@ export function NewSessionModal({
     <div className="modal-scrim" onMouseDown={onCancel}>
       <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <span className="modal-title">新建会话 · 选择工作目录</span>
-          <button className="modal-x" onClick={onCancel} title="关闭">
+          <span className="modal-title">{t('newSession.title')}</span>
+          <button className="modal-x" onClick={onCancel} title="close">
             ✕
           </button>
         </div>
@@ -108,24 +110,23 @@ export function NewSessionModal({
             onKeyDown={(e) => {
               if (e.key === 'Enter') browse(path);
             }}
-            placeholder="输入或粘贴路径，回车进入"
+            placeholder={t('newSession.pathPlaceholder')}
           />
-          <button className="ghost-btn" onClick={() => browse(path)} title="进入该路径">
-            进入
+          <button className="ghost-btn" onClick={() => browse(path)}>
+            {t('newSession.enter')}
           </button>
         </div>
 
         <div className="crumb-row">
-          <button className="chip-btn" onClick={() => browse('')} title="驱动器 / 根">
-            ⌂ 驱动器
+          <button className="chip-btn" onClick={() => browse('')}>
+            {t('newSession.drives')}
           </button>
           <button
             className="chip-btn"
             disabled={parent === null}
             onClick={() => browse(parent ?? '')}
-            title="上级目录"
           >
-            ↑ 上级
+            {t('newSession.up')}
           </button>
           {creating ? (
             <span className="mk-inline">
@@ -133,7 +134,7 @@ export function NewSessionModal({
                 className="path-input mk-input"
                 autoFocus
                 value={folderName}
-                placeholder="新文件夹名"
+                placeholder={t('newSession.folderName')}
                 onChange={(e) => setFolderName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') createFolder();
@@ -141,26 +142,21 @@ export function NewSessionModal({
                 }}
               />
               <button className="chip-btn" onClick={createFolder}>
-                创建
+                {t('newSession.create')}
               </button>
               <button className="chip-btn" onClick={() => setCreating(false)}>
-                取消
+                {t('newSession.cancel')}
               </button>
             </span>
           ) : (
-            <button
-              className="chip-btn"
-              disabled={!path}
-              onClick={() => setCreating(true)}
-              title="在当前目录新建文件夹"
-            >
-              ＋ 新建文件夹
+            <button className="chip-btn" disabled={!path} onClick={() => setCreating(true)}>
+              {t('newSession.newFolder')}
             </button>
           )}
         </div>
 
         <div className="dir-list">
-          {dirs.length === 0 && <div className="dir-empty">（无子目录）</div>}
+          {dirs.length === 0 && <div className="dir-empty">{t('newSession.noSub')}</div>}
           {dirs.map((d) => (
             <button
               key={d.path}
@@ -179,18 +175,18 @@ export function NewSessionModal({
 
         <div className="modal-foot">
           <span className="foot-path" title={path}>
-            {path || '未选择'}
+            {path || t('newSession.unselected')}
           </span>
           <div className="foot-actions">
             <button className="ghost-btn" onClick={onCancel}>
-              取消
+              {t('newSession.cancel')}
             </button>
             <button
               className="primary-btn"
               disabled={!path}
               onClick={() => onConfirm(path)}
             >
-              在此新建会话
+              {t('newSession.confirm')}
             </button>
           </div>
         </div>

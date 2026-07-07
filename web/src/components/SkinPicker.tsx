@@ -9,6 +9,7 @@ import {
   UPLOAD_SPEC,
   validateAsset,
 } from '../lib/skins';
+import { useI18n } from '../lib/i18n';
 
 /** 换肤面板：选皮肤 + 新建主题 + 按状态上传像素资产。 */
 export function SkinPicker({
@@ -28,6 +29,7 @@ export function SkinPicker({
   const [newName, setNewName] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState<SessionStatus | null>(null);
+  const { t } = useI18n();
   const fileRef = useRef<{ input: HTMLInputElement | null; state: SessionStatus | null }>({
     input: null,
     state: null,
@@ -37,7 +39,7 @@ export function SkinPicker({
 
   const pickFile = (state: SessionStatus) => {
     if (!activeTheme) {
-      setErr('先选择或输入一个主题名');
+      setErr(t('skin.pickFirst'));
       return;
     }
     setErr('');
@@ -77,7 +79,7 @@ export function SkinPicker({
   return (
     <div className="skin-panel">
       <div className="skin-head">
-        <span>吉祥物换肤</span>
+        <span>{t('skin.title')}</span>
         <button className="modal-x" onClick={onClose}>
           ✕
         </button>
@@ -88,41 +90,41 @@ export function SkinPicker({
           className={`skin-chip ${skin === BUILTIN ? 'sel' : ''}`}
           onClick={() => onPick(BUILTIN)}
         >
-          🐾 内置 Clawd
+          {t('skin.builtin')}
         </button>
-        {themes.map((t) => (
+        {themes.map((th) => (
           <button
-            key={t.name}
-            className={`skin-chip ${skin === t.name ? 'sel' : ''}`}
+            key={th.name}
+            className={`skin-chip ${skin === th.name ? 'sel' : ''}`}
             onClick={() => {
-              setTarget(t.name);
-              onPick(t.name);
+              setTarget(th.name);
+              onPick(th.name);
             }}
           >
-            {t.name}
+            {th.name}
           </button>
         ))}
       </div>
 
       <div className="skin-spec">
-        自定义：{UPLOAD_SPEC.exts.join(' / ')} · ≤512KB · {UPLOAD_SPEC.recommend}
+        {UPLOAD_SPEC.exts.join(' / ')} · ≤512KB · {UPLOAD_SPEC.recommend}
         <br />
-        缺失状态自动回退内置 Clawd。
+        {t('skin.fallbackNote')}
       </div>
 
       <div className="skin-target">
         <select value={target} onChange={(e) => setTarget(e.target.value)}>
-          <option value="">＋ 新建主题…</option>
-          {themes.map((t) => (
-            <option key={t.name} value={t.name}>
-              {t.name}
+          <option value="">{t('skin.newTheme')}</option>
+          {themes.map((th) => (
+            <option key={th.name} value={th.name}>
+              {th.name}
             </option>
           ))}
         </select>
         {!target && (
           <input
             className="path-input"
-            placeholder="主题名（字母数字_-）"
+            placeholder={t('skin.themeName')}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
           />
@@ -141,7 +143,7 @@ export function SkinPicker({
             >
               <span className="slot-state">{STATE_LABEL[st]}</span>
               <span className="slot-hint">
-                {busy === st ? '上传中…' : has ? '已设置 · 替换' : '上传'}
+                {busy === st ? t('skin.uploading') : has ? t('skin.replace') : t('skin.upload')}
               </span>
             </button>
           );

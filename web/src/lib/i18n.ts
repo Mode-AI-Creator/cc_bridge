@@ -68,6 +68,31 @@ const DICT: Record<string, { zh: string; en: string }> = {
   'detail.tools': { zh: '工具调用', en: 'Tool calls' },
   'detail.pet': { zh: 'Coding Pet', en: 'Coding Pet' },
   'detail.none': { zh: '无', en: 'none' },
+
+  // 新建会话弹窗 / NewSessionModal
+  'newSession.title': { zh: '新建会话 · 选择工作目录', en: 'New session · choose working dir' },
+  'newSession.pathPlaceholder': { zh: '输入或粘贴路径，回车进入', en: 'Type/paste a path, Enter to open' },
+  'newSession.enter': { zh: '进入', en: 'Open' },
+  'newSession.drives': { zh: '⌂ 驱动器', en: '⌂ Drives' },
+  'newSession.up': { zh: '↑ 上级', en: '↑ Up' },
+  'newSession.newFolder': { zh: '＋ 新建文件夹', en: '+ New folder' },
+  'newSession.folderName': { zh: '新文件夹名', en: 'Folder name' },
+  'newSession.create': { zh: '创建', en: 'Create' },
+  'newSession.cancel': { zh: '取消', en: 'Cancel' },
+  'newSession.noSub': { zh: '（无子目录）', en: '(no subfolders)' },
+  'newSession.unselected': { zh: '未选择', en: 'Not selected' },
+  'newSession.confirm': { zh: '在此新建会话', en: 'Create session here' },
+
+  // 换肤面板 / SkinPicker
+  'skin.title': { zh: '吉祥物换肤', en: 'Mascot skin' },
+  'skin.builtin': { zh: '🐾 内置 Clawd', en: '🐾 Built-in Clawd' },
+  'skin.fallbackNote': { zh: '缺失状态自动回退内置 Clawd。', en: 'Missing states fall back to built-in Clawd.' },
+  'skin.newTheme': { zh: '＋ 新建主题…', en: '+ New theme…' },
+  'skin.themeName': { zh: '主题名（字母数字_-）', en: 'Theme name (a-z0-9_-)' },
+  'skin.pickFirst': { zh: '先选择或输入一个主题名', en: 'Pick or enter a theme name first' },
+  'skin.uploading': { zh: '上传中…', en: 'Uploading…' },
+  'skin.replace': { zh: '已设置 · 替换', en: 'Set · replace' },
+  'skin.upload': { zh: '上传', en: 'Upload' },
 };
 
 const KEY = 'ccbridge.lang';
