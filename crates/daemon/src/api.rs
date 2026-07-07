@@ -50,6 +50,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/themes/:name/asset/:state", post(upload_theme_asset))
         // 异步信箱 + 共享笔记（Phase 6）
         .route("/api/inbox/send", post(inbox_send))
+        .route("/api/inbox/reply", post(inbox_reply))
         .route("/api/inbox/:session", get(inbox_list))
         .route("/api/inbox/:session/read/:msgId", post(inbox_mark_read))
         .route("/api/inbox/:session/unread", get(inbox_unread))
@@ -89,11 +90,10 @@ async fn list_sessions(State(s): State<AppState>) -> impl IntoResponse {
     Json(summaries)
 }
 
-async fn get_session(State(s): State<AppState>, AxPath(id): AxPath<String>) -> impl IntoResponse {
-    let detail = s.store.read().unwrap().detail(&id);
-    match detail {
-        Some(d) => Json(d).into_response(),
-        None => (StatusCode::NOT_FOUND, "session not found").into_response(),
+async fn get_session(State(s): State<AppState>, AxPath(id): AxPath<String>) -> ApiResult<Response> {
+    match s.store.read().unwrap().detail(&id) {
+        Some(d) => Ok(Json(d).into_response()),
+        None => Err(ApiError::not_found("会话不存在")),
     }
 }
 
@@ -182,7 +182,10 @@ async fn list_managed(State(s): State<AppState>) -> impl IntoResponse {
     Json(s.sup.list())
 }
 
-async fn spawn_session(State(s): State<AppState>, Json(req): Json<SpawnReq>) -> impl IntoResponse {
+async fn spawn_session(
+    State(s): State<AppState>,
+    Json(req): Json<SpawnReq>,
+) -> ApiResult<Response> {
     let program = s.config.claude.program.clone();
     let mut args: Vec<String> = Vec::new();
     if req.skip_permissions {
@@ -193,10 +196,8 @@ async fn spawn_session(State(s): State<AppState>, Json(req): Json<SpawnReq>) -> 
         args.push(r.clone());
     }
     let title = basename(&req.cwd);
-    match s.sup.spawn(&req.cwd, &program, &args, &title) {
-        Ok(id) => Json(serde_json::json!({ "id": id })).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-    }
+    let id = s.sup.spawn(&req.cwd, &program, &args, &title)?;
+    Ok(Json(serde_json::json!({ "id": id })).into_response())
 }
 
 async fn kill_session(State(s): State<AppState>, AxPath(id): AxPath<String>) -> impl IntoResponse {
@@ -321,38 +322,35 @@ fn list_roots() -> Vec<DirEntryDto> {
 }
 
 /// GET /api/fs/list?path=... — 列出子目录；path 为空则列出驱动器/根。
-async fn fs_list(Query(q): Query<ListQuery>) -> impl IntoResponse {
+async fn fs_list(Query(q): Query<ListQuery>) -> ApiResult<Response> {
     let raw = q.path.unwrap_or_default();
     if raw.trim().is_empty() {
-        return Json(ListResp {
+        return Ok(Json(ListResp {
             path: String::new(),
             parent: None,
             dirs: list_roots(),
         })
-        .into_response();
+        .into_response());
     }
     let p = std::path::Path::new(&raw);
-    match std::fs::read_dir(p) {
-        Ok(rd) => {
-            let mut dirs: Vec<DirEntryDto> = rd
-                .filter_map(|e| e.ok())
-                .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
-                .map(|e| DirEntryDto {
-                    name: e.file_name().to_string_lossy().to_string(),
-                    path: e.path().to_string_lossy().to_string(),
-                })
-                .collect();
-            dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-            let parent = p.parent().map(|pp| pp.to_string_lossy().to_string());
-            Json(ListResp {
-                path: p.to_string_lossy().to_string(),
-                parent,
-                dirs,
-            })
-            .into_response()
-        }
-        Err(e) => (StatusCode::BAD_REQUEST, format!("无法读取目录: {e}")).into_response(),
-    }
+    let rd =
+        std::fs::read_dir(p).map_err(|e| ApiError::bad_request(format!("无法读取目录: {e}")))?;
+    let mut dirs: Vec<DirEntryDto> = rd
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .map(|e| DirEntryDto {
+            name: e.file_name().to_string_lossy().to_string(),
+            path: e.path().to_string_lossy().to_string(),
+        })
+        .collect();
+    dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    let parent = p.parent().map(|pp| pp.to_string_lossy().to_string());
+    Ok(Json(ListResp {
+        path: p.to_string_lossy().to_string(),
+        parent,
+        dirs,
+    })
+    .into_response())
 }
 
 #[derive(Deserialize)]
@@ -362,16 +360,15 @@ struct MkdirReq {
 }
 
 /// POST /api/fs/mkdir — 在 parent 下新建文件夹，返回新路径。
-async fn fs_mkdir(Json(req): Json<MkdirReq>) -> impl IntoResponse {
+async fn fs_mkdir(Json(req): Json<MkdirReq>) -> ApiResult<Response> {
     let name = req.name.trim();
-    if name.is_empty() || name.contains(['/', '\\']) {
-        return (StatusCode::BAD_REQUEST, "文件夹名不合法".to_string()).into_response();
+    // 防路径穿越：拒绝分隔符、`.`、`..` 及空名
+    if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
+        return Err(ApiError::bad_request("文件夹名不合法"));
     }
     let full = std::path::Path::new(&req.parent).join(name);
-    match std::fs::create_dir_all(&full) {
-        Ok(_) => Json(serde_json::json!({ "path": full.to_string_lossy() })).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, format!("创建失败: {e}")).into_response(),
-    }
+    std::fs::create_dir_all(&full).map_err(|e| ApiError::bad_request(format!("创建失败: {e}")))?;
+    Ok(Json(serde_json::json!({ "path": full.to_string_lossy() })).into_response())
 }
 
 // ---------- 吉祥物换肤主题 ----------
@@ -381,10 +378,10 @@ async fn list_themes() -> impl IntoResponse {
 }
 
 /// GET /api/themes/:name/asset/:state — 返回资产字节。
-async fn get_theme_asset(AxPath((name, state)): AxPath<(String, String)>) -> impl IntoResponse {
+async fn get_theme_asset(AxPath((name, state)): AxPath<(String, String)>) -> ApiResult<Response> {
     match crate::themes::read_asset(&name, &state) {
-        Some((bytes, ct)) => ([(axum::http::header::CONTENT_TYPE, ct)], bytes).into_response(),
-        None => (StatusCode::NOT_FOUND, "无此资产").into_response(),
+        Some((bytes, ct)) => Ok(([(axum::http::header::CONTENT_TYPE, ct)], bytes).into_response()),
+        None => Err(ApiError::not_found("无此资产")),
     }
 }
 
@@ -399,16 +396,14 @@ struct UploadReq {
 async fn upload_theme_asset(
     AxPath((name, state)): AxPath<(String, String)>,
     Json(req): Json<UploadReq>,
-) -> impl IntoResponse {
+) -> ApiResult<Response> {
     use base64::Engine;
-    let bytes = match base64::engine::general_purpose::STANDARD.decode(req.data_base64.as_bytes()) {
-        Ok(b) => b,
-        Err(_) => return (StatusCode::BAD_REQUEST, "base64 解码失败".to_string()).into_response(),
-    };
-    match crate::themes::write_asset(&name, &state, &req.filename, &bytes) {
-        Ok(fname) => Json(serde_json::json!({ "file": fname })).into_response(),
-        Err(e) => (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
-    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(req.data_base64.as_bytes())
+        .map_err(|_| ApiError::bad_request("base64 解码失败"))?;
+    let fname = crate::themes::write_asset(&name, &state, &req.filename, &bytes)
+        .map_err(|e| ApiError::bad_request(e.to_string()))?;
+    Ok(Json(serde_json::json!({ "file": fname })).into_response())
 }
 
 // ---------- 异步信箱 + 共享笔记（Phase 6） ----------
@@ -431,12 +426,8 @@ struct SendReq {
     urgent: bool,
 }
 
-/// POST /api/inbox/send — 发消息；WS 广播 + urgent 时向活着的托管会话注入。
-async fn inbox_send(State(s): State<AppState>, Json(req): Json<SendReq>) -> ApiResult<Response> {
-    if req.to.trim().is_empty() || req.body.trim().is_empty() {
-        return Err(ApiError::bad_request("to / body 不能为空"));
-    }
-    let msg = s.mailbox.send(&req.from, &req.to, &req.body, req.urgent)?;
+/// 投递副作用：WS 广播 + urgent 时向活着的托管会话注入一行提示。
+fn deliver(s: &AppState, msg: &crate::mailbox::Message) {
     let _ = s.tx.send(
         serde_json::json!({
             "type": "inbox",
@@ -446,13 +437,43 @@ async fn inbox_send(State(s): State<AppState>, Json(req): Json<SendReq>) -> ApiR
         })
         .to_string(),
     );
-    // urgent 投递：若收件人是活着的托管会话，直接注入一行提示
     if msg.urgent {
         if let Some(sess) = s.sup.get(&msg.to) {
             let line = format!("\r\n[ccbridge] 来自 {} 的消息: {}\r\n", msg.from, msg.body);
             let _ = sess.write_input(line.as_bytes());
         }
     }
+}
+
+/// POST /api/inbox/send — 发消息。
+async fn inbox_send(State(s): State<AppState>, Json(req): Json<SendReq>) -> ApiResult<Response> {
+    if req.to.trim().is_empty() || req.body.trim().is_empty() {
+        return Err(ApiError::bad_request("to / body 不能为空"));
+    }
+    let msg = s.mailbox.send(&req.from, &req.to, &req.body, req.urgent)?;
+    deliver(&s, &msg);
+    Ok(Json(msg).into_response())
+}
+
+#[derive(Deserialize)]
+struct ReplyReq {
+    replier: String,
+    msg_id: String,
+    body: String,
+    #[serde(default)]
+    urgent: bool,
+}
+
+/// POST /api/inbox/reply — 回复某条消息（收件人=原发件人）。
+async fn inbox_reply(State(s): State<AppState>, Json(req): Json<ReplyReq>) -> ApiResult<Response> {
+    if req.body.trim().is_empty() {
+        return Err(ApiError::bad_request("body 不能为空"));
+    }
+    let msg = s
+        .mailbox
+        .reply(&req.replier, &req.msg_id, &req.body, req.urgent)
+        .map_err(|e| ApiError::bad_request(e.to_string()))?;
+    deliver(&s, &msg);
     Ok(Json(msg).into_response())
 }
 
@@ -611,6 +632,39 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn fs_mkdir_rejects_traversal() {
+        for bad in [
+            r#"{"parent":"/tmp","name":".."}"#,
+            r#"{"parent":"/tmp","name":"a/b"}"#,
+        ] {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/fs/mkdir")
+                .header("content-type", "application/json")
+                .body(Body::from(bad))
+                .unwrap();
+            let res = router(test_state()).oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+            let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+            let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert!(v["error"].is_string(), "统一 error envelope");
+        }
+    }
+
+    #[tokio::test]
+    async fn get_session_404_has_json_error() {
+        let req = Request::builder()
+            .uri("/api/sessions/nope")
+            .body(Body::empty())
+            .unwrap();
+        let res = router(test_state()).oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(v["error"].is_string());
     }
 
     #[tokio::test]

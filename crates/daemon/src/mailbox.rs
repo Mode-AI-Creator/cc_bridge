@@ -164,8 +164,7 @@ impl Mailbox {
         Ok(n)
     }
 
-    /// 按原消息回复（收件人=原发件人）。保留为公共 API（前端/未来 REST 复用）。
-    #[allow(dead_code)]
+    /// 按原消息回复（收件人=原发件人）。
     pub fn reply(&self, replier: &str, msg_id: &str, body: &str, urgent: bool) -> Result<Message> {
         let orig_from: Option<String> = {
             let conn = self.conn.lock().unwrap();
