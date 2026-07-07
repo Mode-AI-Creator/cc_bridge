@@ -9,3 +9,11 @@ addr = "127.0.0.1:7878"
 [claude]
 # claude 可执行文件名或完整路径。env 覆盖：CCBRIDGE_CLAUDE
 program = "claude"
+
+# 价格覆盖（USD / 百万 token）。可选；缺省用内置价（版本见启动日志）。
+# 只需覆盖变动的档位，四个字段需齐全。
+# [pricing.opus]
+# input = 15.0
+# output = 75.0
+# cache_write = 18.75
+# cache_read = 1.5

@@ -41,6 +41,21 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    // panic 记入日志（后台线程 panic 不至于静默丢失）
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!("panic: {info}");
+        default_hook(info);
+    }));
+
+    // 配置需在解析（计价）之前装配：应用价格覆盖 + 标注版本
+    let config = Arc::new(config::Config::load());
+    ccbridge_core::pricing::set_table(config.pricing.to_table());
+    tracing::info!(
+        "价格表版本 {}（可在 config.toml [pricing] 覆盖）",
+        ccbridge_core::pricing::PRICE_TABLE_VERSION
+    );
+
     let projects = ccbridge_core::discovery::claude_projects_dir()
         .ok_or_else(|| anyhow::anyhow!("无法定位 ~/.claude/projects 目录"))?;
     if !projects.exists() {
@@ -53,11 +68,25 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("已加载 {} 个会话（耗时 {:?}）", store.len(), t0.elapsed());
     let store = Arc::new(RwLock::new(store));
 
+    // 未知模型告警（成本回退 sonnet 档估算）
+    {
+        let unknown: std::collections::BTreeSet<String> = store
+            .read()
+            .unwrap()
+            .summaries()
+            .iter()
+            .filter_map(|s| s.model.clone())
+            .filter(|m| !ccbridge_core::pricing::is_known(m))
+            .collect();
+        for m in unknown {
+            tracing::warn!("未知模型 `{m}`：成本按 sonnet 档位估算，请更新价格表");
+        }
+    }
+
     let (tx, _rx) = broadcast::channel::<String>(64);
     watcher::spawn_watcher(projects.clone(), store.clone(), tx.clone());
 
     let sup = Arc::new(supervisor::Supervisor::new());
-    let config = Arc::new(config::Config::load());
     let mailbox = Arc::new(mailbox::Mailbox::open_default().unwrap_or_else(|e| {
         tracing::warn!("信箱 SQLite 打开失败，降级内存库：{e}");
         mailbox::Mailbox::open_memory().expect("内存库")
@@ -75,6 +104,15 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("ccbridge daemon 已启动 → http://{}", addr);
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+    tracing::info!("已优雅关闭");
     Ok(())
+}
+
+/// 等待 Ctrl-C 触发优雅关闭。
+async fn shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
+    tracing::info!("收到关闭信号，正在停止…");
 }

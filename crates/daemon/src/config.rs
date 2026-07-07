@@ -12,6 +12,52 @@ use std::path::PathBuf;
 pub struct Config {
     pub server: ServerConfig,
     pub claude: ClaudeConfig,
+    pub pricing: PricingConfig,
+}
+
+/// 价格覆盖（USD / 百万 token）。缺省档位用内置价。
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct PricingConfig {
+    pub opus: Option<TierPrice>,
+    pub sonnet: Option<TierPrice>,
+    pub haiku: Option<TierPrice>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct TierPrice {
+    pub input: f64,
+    pub output: f64,
+    pub cache_write: f64,
+    pub cache_read: f64,
+}
+
+impl From<TierPrice> for ccbridge_core::pricing::Price {
+    fn from(t: TierPrice) -> Self {
+        Self {
+            input: t.input,
+            output: t.output,
+            cache_write: t.cache_write,
+            cache_read: t.cache_read,
+        }
+    }
+}
+
+impl PricingConfig {
+    /// 以内置表为基，应用覆盖，产出最终价格表。
+    pub fn to_table(&self) -> ccbridge_core::pricing::PriceTable {
+        let mut t = ccbridge_core::pricing::PriceTable::builtin();
+        if let Some(p) = self.opus {
+            t.opus = p.into();
+        }
+        if let Some(p) = self.sonnet {
+            t.sonnet = p.into();
+        }
+        if let Some(p) = self.haiku {
+            t.haiku = p.into();
+        }
+        t
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
