@@ -6,6 +6,7 @@ import { ClawdSprite } from './ClawdSprite';
 import { SkinPicker } from './SkinPicker';
 import { type DiskTheme, assetUrl, resolveSkin } from '../lib/skins';
 import type { ActionEvent } from '../lib/actions';
+import { useI18n } from '../lib/i18n';
 
 export function DetailPane({
   id,
@@ -29,6 +30,7 @@ export function DetailPane({
     () => localStorage.getItem('ccbridge.clawd') !== '0',
   );
   const [picking, setPicking] = useState(false);
+  const { t } = useI18n();
   const toggleClawd = () =>
     setShowClawd((v) => {
       localStorage.setItem('ccbridge.clawd', v ? '0' : '1');
@@ -52,14 +54,14 @@ export function DetailPane({
   if (!id) {
     return (
       <div className="detail-pane">
-        <div className="detail-empty">选择会话查看详情</div>
+        <div className="detail-empty">{t('detail.pickSession')}</div>
       </div>
     );
   }
   if (!d) {
     return (
       <div className="detail-pane">
-        <div className="detail-empty">加载中…</div>
+        <div className="detail-empty">{t('detail.loading')}</div>
       </div>
     );
   }
@@ -73,46 +75,38 @@ export function DetailPane({
       <div className="kv-grid small">
         <div className="kv">
           <div className="v">{STATUS_LABEL[d.status]}</div>
-          <div className="k">状态</div>
+          <div className="k">{t('detail.status')}</div>
         </div>
         <div className="kv">
           <div className="v">{shortModel(d.model)}</div>
-          <div className="k">模型</div>
+          <div className="k">{t('detail.model')}</div>
         </div>
         <div className="kv">
           <div className="v cost">{fmtCost(d.usage.cost_usd)}</div>
-          <div className="k">成本</div>
+          <div className="k">{t('detail.cost')}</div>
         </div>
         <div className="kv">
           <div className="v">{fmtTokens(d.usage.input)}</div>
-          <div className="k">输入</div>
+          <div className="k">{t('detail.input')}</div>
         </div>
         <div className="kv">
           <div className="v">{fmtTokens(d.usage.output)}</div>
-          <div className="k">输出</div>
+          <div className="k">{t('detail.output')}</div>
         </div>
         <div className="kv">
           <div className="v">{fmtTokens(d.usage.cache_read)}</div>
-          <div className="k">缓存读</div>
+          <div className="k">{t('detail.cacheRead')}</div>
         </div>
       </div>
       <div className="section-title">
-        {showClawd ? 'Coding Pet' : '工具调用'}
+        {showClawd ? t('detail.pet') : t('detail.tools')}
         <span className="muted">· {d.tool_count}</span>
         {showClawd && (
-          <button
-            className="clawd-toggle"
-            onClick={() => setPicking((v) => !v)}
-            title="换肤"
-          >
+          <button className="clawd-toggle" onClick={() => setPicking((v) => !v)} title="skin">
             🎨
           </button>
         )}
-        <button
-          className="clawd-toggle"
-          onClick={toggleClawd}
-          title={showClawd ? '切换到工具日志' : '切换到 Clawd 精灵'}
-        >
+        <button className="clawd-toggle" onClick={toggleClawd} title="toggle">
           {showClawd ? '📜' : '🐾'}
         </button>
       </div>
@@ -148,11 +142,13 @@ export function DetailPane({
         )
       ) : (
         <div className="tool-scroll">
-          {d.recent_tools.length === 0 && <div className="muted sm">无</div>}
-          {[...d.recent_tools].reverse().map((t, i) => (
+          {d.recent_tools.length === 0 && (
+            <div className="muted sm">{t('detail.none')}</div>
+          )}
+          {[...d.recent_tools].reverse().map((tc, i) => (
             <div className="tool-row" key={i}>
-              <span className="tname">{t.name}</span>
-              <span className="tdetail">{t.detail}</span>
+              <span className="tname">{tc.name}</span>
+              <span className="tdetail">{tc.detail}</span>
             </div>
           ))}
         </div>

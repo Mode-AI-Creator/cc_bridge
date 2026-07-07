@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { SessionSummary } from '../types';
 import { fmtCost, relTime } from '../lib/format';
-import { type Bucket, BUCKETS, BUCKET_LABEL } from '../lib/classify';
+import { type Bucket, BUCKETS } from '../lib/classify';
+import { useI18n } from '../lib/i18n';
 
 const PROJECT_MIME = 'application/x-ccbridge-project';
 const SESSION_MIME = 'application/x-ccbridge-session';
@@ -35,6 +36,8 @@ export function SessionList({
   onReclassify: (id: string, bucket: Bucket) => void;
   onDropProjectCwd: (cwd: string) => void;
 }) {
+  const { t } = useI18n();
+  const bucketLabel = (b: Bucket) => t(`bucket.${b}`);
   const [dragOver, setDragOver] = useState(false);
   const [overTab, setOverTab] = useState<Bucket | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -77,10 +80,10 @@ export function SessionList({
       }}
     >
       <div className="list-head">
-        <span className="list-title">CC Sessions</span>
+        <span className="list-title">{t('list.title')}</span>
         <input
           className="search-sm"
-          placeholder="搜索全部会话…"
+          placeholder={t('list.search')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -92,7 +95,7 @@ export function SessionList({
             key={b}
             className={`bucket-tab ${tab === b ? 'sel' : ''} ${overTab === b ? 'over' : ''}`}
             onClick={() => setTab(b)}
-            title={`拖会话到此归入「${BUCKET_LABEL[b]}」`}
+            title={bucketLabel(b)}
             onDragOver={(e) => {
               if (e.dataTransfer.types.includes(SESSION_MIME)) {
                 e.preventDefault();
@@ -109,7 +112,7 @@ export function SessionList({
               if (sid) onReclassify(sid, b);
             }}
           >
-            {BUCKET_LABEL[b]}
+            {bucketLabel(b)}
             <span className="bucket-count">{counts[b]}</span>
           </button>
         ))}
@@ -119,10 +122,10 @@ export function SessionList({
         {list.length === 0 && (
           <div className="list-empty">
             {searching
-              ? '无匹配会话'
+              ? t('list.noMatch')
               : tab === 'active'
-                ? '暂无激活会话 · 从任务栏拖会话到此或切换标签'
-                : '此分类为空 · 拖会话到标签归类'}
+                ? t('list.emptyActive')
+                : t('list.emptyOther')}
           </div>
         )}
         {list.map((s) => {
@@ -173,7 +176,7 @@ export function SessionList({
                 <span className="sess-proj">
                   {s.project_name}
                   {searching && (
-                    <span className="sess-bucket-tag">{BUCKET_LABEL[bucketFor(s)]}</span>
+                    <span className="sess-bucket-tag">{bucketLabel(bucketFor(s))}</span>
                   )}
                 </span>
               </div>
