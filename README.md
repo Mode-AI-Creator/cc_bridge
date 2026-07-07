@@ -66,9 +66,12 @@ ccbridge 干两件事：
 - **实时监控**：每会话状态、token 明细、成本、工具调用时间线、最近消息
 - **全局统计**：近 5h / 近 7d / 累计成本、状态分布、tokens
 - **实时更新**：`notify` 文件监听 + WebSocket 推送 + 5s 兜底刷新
-- **交互式续聊**：一键 `--resume` 任意会话到内嵌真实终端；多会话并存、切换不打断后台进程
+- **交互式续聊**：一键 `--resume` 任意会话到内嵌真实终端；多会话并存、切换不打断后台进程；关 tab = 收起（进程续跑，可从「运行中」重开，刷新不丢）
+- **跨会话通信（Phase 6）**：SQLite 持久化的异步信箱 + 共享笔记；MCP server 让不同会话的 agent 互发消息（`send_to_session` / `inbox_read` / `shared_note_*` …）；前端 ✉ 消息总线可人工收发 + 未读徽标
+- **可换肤吉祥物**：内置像素 Coding Pet（按状态动、眼睛跟随光标）+ 用户自上传主题（PNG/APNG/GIF/WebP/SVG，≤512KiB）；尊重 `prefers-reduced-motion`
+- **中英双语**：顶栏一键切换 zh / en
 - **可选 `--dangerously-skip-permissions`**：新建 / 续聊时一键开关跳过权限确认
-- **工作台交互**：中间看板默认只显示激活会话，其余从左侧项目树拖入 / 拖出；行内重命名；面板拖拽调宽；任务栏可收放
+- **工作台交互**：三态看板（激活 / 非激活 / 历史）+ 拖拽归类 + 跨会话搜索；行内重命名；面板拖拽调宽；任务栏可收放
 - **新建会话目录选择器**：居中弹窗浏览文件系统、选目录、就地新建文件夹
 
 ## 快速开始
@@ -135,13 +138,18 @@ ccbridge install-hooks     # 注入 CC hook（精确状态）+ MCP server（agen
 
 ## 进度
 
-MVP + PTY 托管 + Phase 3（hook）+ Phase 4（三态看板）+ Phase 5（像素吉祥物/换肤）+ Phase 6（信箱 + MCP）已完成，正朝 1.0 硬化（持久化 / 配置 / CI / 打包）推进。1.0 之后：Phase 7 轻量 TUI（ratatui）、远程 SSH。详见 [PLAN.md](./PLAN.md) §6.6/6.7。
+MVP + PTY 托管 + **Phase 3–6 全部完成**（hook 精确状态 / 三态看板 / 像素吉祥物·换肤 / 信箱·MCP），**1.0 工程硬化 P0+P1 已落地**：统一 config + error envelope、SQLite 持久化、前端错误边界 + 断线横幅、中英 i18n、a11y（reduced-motion）、bundle 拆分、自定义 hook 状态管理、可配置价格表 + 优雅关闭。
+
+**CI**：GitHub Actions 跨平台（Linux/macOS/Windows）fmt + clippy + test，Web build + vitest + Playwright E2E，cargo audit + cargo deny + 覆盖率报告——全绿。**打包**：`--features embed-frontend` 产出自包含单二进制；tag 触发跨平台 release。
+
+1.0 之后：Phase 7 轻量 TUI（ratatui）、远程 SSH、更全面的 i18n 覆盖。详见 [PLAN.md](./PLAN.md) §6.6/6.7。
 
 ## 已知局限
 
 - 无 hook 时状态按活动时间启发式推断；装 hook 后精确到工具级。
-- 会话缓存派生自 JSONL（重启重扫）；信箱/笔记已 SQLite 持久化。
+- 会话缓存派生自 JSONL（重启重扫）；信箱 / 笔记已 SQLite 持久化。
 - 仅本地会话；远程 SSH 见 PLAN.md（1.0 后）。
+- i18n 覆盖主流程（顶栏 / 列表 / 详情 / 对话 / 信箱 / 弹窗）；极少数状态标签仍为中文，增量补齐。
 - 文件系统浏览 / 进程启动 / 终端注入等接口仅供本地单用户，只绑 `127.0.0.1`——不要暴露公网。
 
 ## License

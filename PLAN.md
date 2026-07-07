@@ -126,11 +126,13 @@ last-prompt / mode / permission-mode / ai-title / queue-operation`。
 | Phase 6 跨会话通信：SQLite 信箱 + 共享笔记 + MCP server + 前端消息总线 | ✅ |
 | 1.0 后端 P0：统一 config / 统一 error envelope / SQLite 持久层 | ✅ |
 | 1.0 前端 P0：错误边界 / 断线横幅 / 连通性追踪 | ✅ |
-| 1.0 质量 P0：CI（Rust 跨平台 matrix + Web + audit）+ Playwright E2E | ✅ |
+| 1.0 质量 P0：CI（Rust 跨平台 matrix + Web + audit + deny + 覆盖率）+ Playwright E2E | ✅ CI 全绿 |
 | 1.0 发布 P0：embed-frontend 单二进制 + release workflow + 文档全套 | ✅ |
-| Phase 7 TUI（ratatui）/ 远程 SSH / i18n / a11y 等 | ⬜（1.0 后） |
+| 1.0 P1 前端：中英 i18n + 语言切换、a11y（reduced-motion + ARIA）、bundle 拆分（xterm 懒加载）、状态管理抽 hook | ✅ |
+| 1.0 P1 后端：价格表可配置 + 版本 + 未知模型告警、优雅关闭、panic hook | ✅ |
+| Phase 7 TUI（ratatui）/ 远程 SSH / 更全面 i18n 覆盖 | ⬜（1.0 后） |
 
-每个阶段落地时在关键节点补 **冒烟测试 + 用例测试**：现共 **62** 个测试（41 Rust + 21 前端）全绿。
+每个阶段落地时在关键节点补 **冒烟测试 + 用例测试**：现共 **67** 个测试（43 Rust + 24 前端）全绿；GitHub Actions 跨平台 CI（Linux/macOS/Windows）全绿。
 
 ### Phase 3 — Hook 集成（实时事实层）
 
