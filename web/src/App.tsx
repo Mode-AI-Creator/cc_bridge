@@ -1,20 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { SessionSummary, Stats } from './types';
-import {
-  getSessions,
-  getStats,
-  getThemes,
-  getManaged,
-  killManaged,
-  getInbox,
-  sendInbox,
-  markInboxRead,
-  connectWs,
-  OPERATOR,
-} from './api';
-import type { ManagedInfo, InboxMessage } from './types';
+import { getSessions, getStats, getManaged, killManaged, connectWs } from './api';
+import type { ManagedInfo } from './types';
 import { InboxPanel } from './components/InboxPanel';
-import { type DiskTheme, loadSkin, saveSkin } from './lib/skins';
+import { useInbox } from './hooks/useInbox';
+import { useThemes } from './hooks/useThemes';
 import { StatsBar } from './components/StatsBar';
 import { TaskBar } from './components/TaskBar';
 import { SessionList } from './components/SessionList';
@@ -30,7 +20,6 @@ import {
   saveBuckets,
 } from './lib/classify';
 import { type ActionEvent, pushAction } from './lib/actions';
-import { unreadCount as countUnread } from './lib/inbox';
 
 // 记住上次新建会话的目录（跨平台，空则从驱动器/根开始浏览）
 const loadLastCwd = () => localStorage.getItem('ccbridge.lastCwd') || '';
@@ -103,35 +92,9 @@ export function App() {
   const [actions, setActions] = useState<Record<string, ActionEvent[]>>({});
   const [managed, setManaged] = useState<ManagedInfo[]>([]);
   const [connected, setConnected] = useState(true);
-  const [inbox, setInbox] = useState<InboxMessage[]>([]);
-  const [inboxOpen, setInboxOpen] = useState(false);
-  const [skin, setSkin] = useState<string>(loadSkin);
-  const [themes, setThemes] = useState<DiskTheme[]>([]);
-  const [themeVersion, setThemeVersion] = useState(0);
+  const ib = useInbox(); // 消息总线（状态 + 收发）
+  const theme = useThemes(); // 换肤主题
   const [newModalOpen, setNewModalOpen] = useState(false);
-
-  const reloadThemes = () => {
-    getThemes()
-      .then((t) => {
-        setThemes(t);
-        setThemeVersion((v) => v + 1); // 触发资产 URL cache-bust
-      })
-      .catch(() => {});
-  };
-  const pickSkin = (name: string) => {
-    setSkin(name);
-    saveSkin(name);
-  };
-
-  const unreadCount = countUnread(inbox);
-  const sendMsg = (to: string, body: string, urgent: boolean) => {
-    sendInbox(to, body, urgent)
-      .then(loadInbox)
-      .catch((e) => window.alert('发送失败: ' + e));
-  };
-  const markRead = (id: string) => {
-    markInboxRead(OPERATOR, id).then(loadInbox).catch(() => {});
-  };
   const [lastCwd, setLastCwd] = useState(loadLastCwd);
 
   // 可调节面板尺寸
@@ -149,10 +112,6 @@ export function App() {
       return n;
     });
 
-  const loadInbox = () => {
-    getInbox(OPERATOR).then(setInbox).catch(() => {});
-  };
-
   const load = () => {
     // getSessions 作为连通性信号：成功→connected，失败→断线横幅
     getSessions()
@@ -169,12 +128,12 @@ export function App() {
 
   useEffect(() => {
     load();
-    loadInbox();
-    reloadThemes();
+    ib.load();
+    theme.reload();
     const stop = connectWs(
       load,
       (p) => setActions((a) => pushAction(a, p as never)),
-      loadInbox,
+      ib.load,
     );
     const iv = setInterval(load, 5000);
     return () => {
@@ -323,17 +282,17 @@ export function App() {
         skipPerms={skipPerms}
         onToggleSkip={toggleSkip}
         connected={connected}
-        unreadCount={unreadCount}
-        onOpenInbox={() => setInboxOpen((v) => !v)}
+        unreadCount={ib.unread}
+        onOpenInbox={() => ib.setOpen((v) => !v)}
       />
-      {inboxOpen && (
+      {ib.open && (
         <InboxPanel
-          messages={inbox}
+          messages={ib.messages}
           sessions={sessions}
           renames={renames}
-          onSend={sendMsg}
-          onMarkRead={markRead}
-          onClose={() => setInboxOpen(false)}
+          onSend={ib.send}
+          onMarkRead={ib.markRead}
+          onClose={() => ib.setOpen(false)}
         />
       )}
       <div className="workspace" style={workspaceVars}>
@@ -375,11 +334,11 @@ export function App() {
           <DetailPane
             id={selectedId}
             liveActions={selectedId ? actions[selectedId] || [] : []}
-            skin={skin}
-            themes={themes}
-            themeVersion={themeVersion}
-            onPickSkin={pickSkin}
-            onReloadThemes={reloadThemes}
+            skin={theme.skin}
+            themes={theme.themes}
+            themeVersion={theme.version}
+            onPickSkin={theme.pick}
+            onReloadThemes={theme.reload}
           />
         </div>
         <VResizer onResize={(dx) => setSidebarW((w) => clamp(w + dx, 280, 760))} />
