@@ -35,6 +35,7 @@ export function StatsBar({
       <button
         className="icon-btn"
         onClick={onToggleTaskbar}
+        aria-label={taskbarCollapsed ? '展开任务栏' : '收起任务栏'}
         title={taskbarCollapsed ? '展开任务栏' : '收起任务栏'}
       >
         ☰
@@ -90,7 +91,12 @@ export function StatsBar({
           ● 未连接
         </span>
       )}
-      <button className="icon-btn inbox-btn" onClick={onOpenInbox} title="消息总线">
+      <button
+        className="icon-btn inbox-btn"
+        onClick={onOpenInbox}
+        aria-label={`消息总线${unreadCount > 0 ? `，${unreadCount} 条未读` : ''}`}
+        title="消息总线"
+      >
         ✉
         {unreadCount > 0 && <span className="inbox-badge">{unreadCount}</span>}
       </button>

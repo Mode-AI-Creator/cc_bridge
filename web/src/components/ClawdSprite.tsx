@@ -181,6 +181,16 @@ export function ClawdSprite({ status }: { status: string }) {
     const ctx = cv.getContext('2d');
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
+
+    // 尊重系统「减少动态效果」：静态渲染一帧，不跑动画循环
+    const reduced =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) {
+      render(ctx, statusRef.current as Status, 0, { dx: 0, dy: 0 });
+      return;
+    }
+
     let raf = 0;
     const start = performance.now();
     const loop = (now: number) => {
