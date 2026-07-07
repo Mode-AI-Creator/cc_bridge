@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import type { SessionSummary, SessionDetail, ManagedInfo } from '../types';
 import { getDetail } from '../api';
-import { TerminalView } from './TerminalView';
+
+// 懒加载终端：xterm 较重，仅在首次打开终端时才拉取其 chunk
+const TerminalView = lazy(() =>
+  import('./TerminalView').then((m) => ({ default: m.TerminalView })),
+);
 
 export interface ChatEntry {
   id: string; // termId
@@ -123,7 +127,9 @@ export function ChatPane({
             key={c.id}
             className={`term-layer ${c.id === activeChatId ? 'active' : ''}`}
           >
-            <TerminalView id={c.id} />
+            <Suspense fallback={<div className="chat-empty">加载终端…</div>}>
+              <TerminalView id={c.id} />
+            </Suspense>
           </div>
         ))}
         {showIntro && (
