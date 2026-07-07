@@ -343,7 +343,7 @@ async fn fs_list(Query(q): Query<ListQuery>) -> ApiResult<Response> {
             path: e.path().to_string_lossy().to_string(),
         })
         .collect();
-    dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    dirs.sort_by_key(|d| d.name.to_lowercase());
     let parent = p.parent().map(|pp| pp.to_string_lossy().to_string());
     Ok(Json(ListResp {
         path: p.to_string_lossy().to_string(),

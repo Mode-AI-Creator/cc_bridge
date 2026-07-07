@@ -7,7 +7,7 @@ use ccbridge_core::discovery;
 use serde::Deserialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub server: ServerConfig,
@@ -40,15 +40,6 @@ impl Default for ClaudeConfig {
     fn default() -> Self {
         Self {
             program: "claude".to_string(),
-        }
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            claude: ClaudeConfig::default(),
         }
     }
 }

@@ -132,7 +132,7 @@ impl Store {
                 s
             })
             .collect();
-        out.sort_by(|a, b| b.last_active_epoch.cmp(&a.last_active_epoch));
+        out.sort_by_key(|s| std::cmp::Reverse(s.last_active_epoch));
         out
     }
 
