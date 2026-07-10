@@ -51,6 +51,21 @@ body,
   height: 100%;
   margin: 0;
 }
+
+/* 会话/消息等文本面板始终可选中复制（即便祖先意外设了 user-select:none 也覆盖） */
+.chat-history,
+.chat-history *,
+.msg,
+.detail-pane,
+.tool-scroll,
+.tool-row,
+.im-body,
+.inbox-msg,
+.detail-path,
+.list-empty,
+.chat-empty {
+  user-select: text;
+}
 body {
   background: var(--bg);
   color: var(--text);

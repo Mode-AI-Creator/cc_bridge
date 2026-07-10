@@ -26,24 +26,36 @@ const loadLastCwd = () => localStorage.getItem('ccbridge.lastCwd') || '';
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
+// 拖拽期间禁用选中/改光标；结束（松手或失焦）时**务必**恢复，避免整页卡在不可选中
+function beginDrag(
+  axis: 'x' | 'y',
+  startPos: number,
+  onDelta: (d: number) => void,
+) {
+  let last = startPos;
+  const move = (ev: MouseEvent) => {
+    const cur = axis === 'x' ? ev.clientX : ev.clientY;
+    onDelta(cur - last);
+    last = cur;
+  };
+  const end = () => {
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', end);
+    window.removeEventListener('blur', end);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  };
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  window.addEventListener('blur', end); // Alt+Tab / 移出窗口也恢复
+  document.body.style.cursor = axis === 'x' ? 'col-resize' : 'row-resize';
+  document.body.style.userSelect = 'none';
+}
+
 function VResizer({ onResize }: { onResize: (dx: number) => void }) {
   const start = (e: React.MouseEvent) => {
     e.preventDefault();
-    let last = e.clientX;
-    const move = (ev: MouseEvent) => {
-      onResize(ev.clientX - last);
-      last = ev.clientX;
-    };
-    const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
+    beginDrag('x', e.clientX, onResize);
   };
   return (
     <div className="v-resizer" onMouseDown={start}>
@@ -55,21 +67,7 @@ function VResizer({ onResize }: { onResize: (dx: number) => void }) {
 function HResizer({ onResize }: { onResize: (dy: number) => void }) {
   const start = (e: React.MouseEvent) => {
     e.preventDefault();
-    let last = e.clientY;
-    const move = (ev: MouseEvent) => {
-      onResize(ev.clientY - last);
-      last = ev.clientY;
-    };
-    const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
+    beginDrag('y', e.clientY, onResize);
   };
   return (
     <div className="h-resizer" onMouseDown={start}>
