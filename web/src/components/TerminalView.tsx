@@ -195,11 +195,30 @@ export function TerminalView({ id }: { id: string }) {
     // 键盘输入走 binary 帧（保证 Ctrl+A=\x01 等控制字符原样送达 PTY）
     const wsSendInput = (data: string) => {
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(encoder.encode(data));
+      const w = window as unknown as { __ccSent?: string[] };
+      (w.__ccSent ||= []).push(data);
+      if (w.__ccSent.length > 20) w.__ccSent.shift();
     };
     // 控制消息走 text 帧，带 CTRL(SOH) 前缀，与 daemon 协议一致
     const wsSendCtrl = (msg: string) => {
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(CTRL + msg);
     };
+
+    // 滚轮：可选择模式下我们剥离了鼠标追踪，若应用想要鼠标（如 CC 的 TUI），
+    // 把滚轮以 SGR 鼠标滚轮序列转发给它，让它滚动自己的对话；
+    // 否则(普通 shell)交给 xterm 滚动回滚缓冲。避免 alt-screen 下被翻译成方向键（跳历史）。
+    term.attachCustomWheelEventHandler((e) => {
+      // 备用屏(alt-screen)= 全屏 TUI（如 CC）。此时 xterm 默认会把滚轮翻译成方向键，
+      // 被 CC 当成翻历史。改为把滚轮以 SGR 鼠标滚轮序列转发给 TUI，让它滚动自己的对话。
+      // 普通屏（shell）则交给 xterm 滚动回滚缓冲。
+      const alt = term.buffer.active.type === 'alternate';
+      if (!alt) return true;
+      const btn = e.deltaY < 0 ? 64 : 65; // 64=滚轮上, 65=滚轮下
+      const seq = `\x1b[<${btn};1;1M`;
+      const notches = 3;
+      for (let i = 0; i < notches; i++) wsSendInput(seq);
+      return false; // 阻止 xterm 默认（alt-screen 方向键翻译）
+    });
 
     const sendResize = () => {
       try {

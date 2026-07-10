@@ -17,16 +17,16 @@ async function openTerminal(page: Page) {
   await expect(page.locator('.term-host')).toBeVisible();
 }
 
-// 让 PTY(powershell) 输出：启用鼠标追踪序列 + 唯一标记行 + 铺满数字文本（供拖选）
+// 让 PTY(node REPL) 输出：启用鼠标追踪序列（node 会一直保持，真实复现 CC）
+// + 唯一标记行 + 铺满数字文本（供拖选）
 async function emitMouseModeAndText(page: Page, marker: string) {
   await page.locator('.term').click(); // 聚焦终端
+  // 用 char code 拼 ESC，避免依赖反斜杠转义；insertText 整段原子插入，杜绝逐字符丢字
   const cmd =
-    "[Console]::Write([char]27+'[?1002h'); [Console]::Write([char]27+'[?1006h'); " +
-    `[Console]::Write('${marker}'+[char]13+[char]10); ` +
-    "1..20 | % { [Console]::Write(('0123456789'*8)); [Console]::Write([char]13+[char]10) }";
-  await page.keyboard.type(cmd);
+    `process.stdout.write(String.fromCharCode(27)+'[?1002h'+String.fromCharCode(27)+'[?1006h'+` +
+    `'${marker}\\r\\n'+('0123456789'.repeat(8)+'\\r\\n').repeat(20))`;
+  await page.keyboard.insertText(cmd);
   await page.keyboard.press('Enter');
-  // 等本轮唯一标记出现（避免上一轮残留导致误判）
   await page.waitForFunction(
     (m) => {
       const t: any = (window as any).__ccterm;
@@ -34,7 +34,6 @@ async function emitMouseModeAndText(page: Page, marker: string) {
       const buf = t.buffer.active;
       for (let i = 0; i < buf.length; i++) {
         const line = buf.getLine(i)?.translateToString() || '';
-        // 标记出现在“输出”里（行首即是），而非命令回显（前面有提示符/命令文本）
         if (line.trimStart().startsWith(m)) return true;
       }
       return false;
@@ -91,4 +90,38 @@ test('selectable-mode strips TUI mouse tracking → drag selects & copies; toggl
     timeout: 5000,
   });
   expect(await mouseMode(page), '开关关闭后状态可读').toBeDefined();
+});
+
+test('wheel in alt-screen forwards SGR to app instead of arrow-key history nav', async ({
+  page,
+}) => {
+  await openTerminal(page);
+  // 进入备用屏（全屏 TUI，如 CC），并挂上输出监听
+  await page.evaluate(() => {
+    const t: any = (window as any).__ccterm;
+    t.write('\x1b[?1049h'); // 进入 alt-screen
+    t.write('alt screen content line\r\n');
+    (window as any).__ccSent = [];
+    (window as any).__ccData = [];
+    t.onData((d: string) => (window as any).__ccData.push(d));
+  });
+  await page.waitForFunction(
+    () => (window as any).__ccterm?.buffer?.active?.type === 'alternate',
+    null,
+    { timeout: 5000 },
+  );
+
+  const box = await page.locator('.xterm-screen').boundingBox();
+  if (!box) throw new Error('no box');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 120); // 向下滚
+  await page.waitForTimeout(150);
+
+  const sent: string[] = await page.evaluate(() => (window as any).__ccSent || []);
+  const data: string[] = await page.evaluate(() => (window as any).__ccData || []);
+
+  // 应把滚轮以 SGR 序列转发给应用（滚 CC 的对话），而不是翻译成方向键
+  expect(sent.join(''), '滚轮应转发 SGR 鼠标序列给应用').toContain('\x1b[<65;');
+  expect(data.join(''), '不应把滚轮翻译成方向键（否则跳历史）').not.toContain('\x1b[A');
+  expect(data.join(''), '不应把滚轮翻译成方向键（否则跳历史）').not.toContain('\x1b[B');
 });
