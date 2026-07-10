@@ -1,7 +1,32 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+
+/** 写剪贴板：navigator.clipboard 不可用（局域网 IP / 非安全上下文）时回退 execCommand。 */
+function copyText(text: string) {
+  if (!text) return;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => execCopyFallback(text));
+  } else {
+    execCopyFallback(text);
+  }
+}
+function execCopyFallback(text: string) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch {
+    /* ignore */
+  }
+}
 
 // CC 暖色系终端主题
 const THEME = {
@@ -34,6 +59,24 @@ const RECONNECT_MAX = 5000;
 
 export function TerminalView({ id }: { id: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<XTerm | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // 一键复制：有选区复制选区，否则复制整个终端缓冲（selectAll 绕开鼠标模式）
+  const copyAll = () => {
+    const t = termRef.current;
+    if (!t) return;
+    const sel = t.getSelection();
+    if (sel) {
+      copyText(sel);
+    } else {
+      t.selectAll();
+      copyText(t.getSelection());
+      t.clearSelection();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -51,36 +94,14 @@ export function TerminalView({ id }: { id: string }) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
+    termRef.current = term;
     try {
       fit.fit();
     } catch {
       /* ignore */
     }
 
-    // ---- 剪贴板：navigator.clipboard 不可用时（局域网 IP / 非安全上下文）回退 execCommand ----
-    const writeClipboard = (text: string) => {
-      if (!text) return;
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(text).catch(() => execCopyFallback(text));
-      } else {
-        execCopyFallback(text);
-      }
-    };
-    const execCopyFallback = (text: string) => {
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      } catch {
-        /* ignore */
-      }
-    };
+    const writeClipboard = copyText;
     const pasteFromClipboard = () => {
       navigator.clipboard
         ?.readText()
@@ -225,12 +246,20 @@ export function TerminalView({ id }: { id: string }) {
         ws.onclose = null; // 防止卸载触发重连
         ws.close();
       }
+      termRef.current = null;
       term.dispose();
     };
   }, [id]);
 
   return (
     <div className="term-host">
+      <button
+        className="term-copy"
+        onClick={copyAll}
+        title="复制（有选区复制选区，否则复制全部）"
+      >
+        {copied ? '✓ 已复制' : '⧉ 复制'}
+      </button>
       <div ref={hostRef} className="term" />
     </div>
   );

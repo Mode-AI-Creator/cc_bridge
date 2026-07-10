@@ -1233,6 +1233,28 @@ body {
   height: 100%;
   width: 100%;
 }
+.term-copy {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 5;
+  background: rgba(42, 39, 35, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  padding: 4px 9px;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+}
+.term-host:hover .term-copy {
+  opacity: 1;
+}
+.term-copy:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
 /* 像素 / CRT 扫描线 */
 .term-host::after {
   content: "";
