@@ -1233,27 +1233,45 @@ body {
   height: 100%;
   width: 100%;
 }
-.term-copy {
+.term-tools {
   position: absolute;
   top: 6px;
   right: 10px;
   z-index: 5;
-  background: rgba(42, 39, 35, 0.9);
+  display: flex;
+  gap: 6px;
+  opacity: 0.5;
+  transition: opacity 0.12s;
+}
+.term-host:hover .term-tools {
+  opacity: 1;
+}
+.term-tool {
+  background: rgba(42, 39, 35, 0.92);
   border: 1px solid var(--border);
   border-radius: 7px;
   color: var(--text-dim);
   font-size: 0.72rem;
   padding: 4px 9px;
   cursor: pointer;
-  opacity: 0.55;
-  transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
-.term-host:hover .term-copy {
-  opacity: 1;
-}
-.term-copy:hover {
+.term-tool:hover {
   color: var(--text);
   border-color: var(--accent);
+}
+.term-tool.on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  opacity: 1;
+}
+/* 选择模式：整个终端强制文字光标 + 保持工具条常亮 */
+.term-host.sel-mode .xterm-screen {
+  cursor: text !important;
+}
+.term-host.sel-mode .term-tools {
+  opacity: 1;
 }
 /* 像素 / CRT 扫描线 */
 .term-host::after {

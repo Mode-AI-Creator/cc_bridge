@@ -61,6 +61,17 @@ export function TerminalView({ id }: { id: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const [copied, setCopied] = useState(false);
+  // 选择模式：开启后普通拖拽即可选中复制（底层把鼠标事件伪装成 Shift，绕开 TUI 鼠标模式）
+  const [selMode, setSelMode] = useState(
+    () => localStorage.getItem('ccbridge.selMode') === '1',
+  );
+  const selModeRef = useRef(selMode);
+  selModeRef.current = selMode;
+  const toggleSelMode = () =>
+    setSelMode((v) => {
+      localStorage.setItem('ccbridge.selMode', v ? '0' : '1');
+      return !v;
+    });
 
   // 一键复制：有选区复制选区，否则复制整个终端缓冲（selectAll 绕开鼠标模式）
   const copyAll = () => {
@@ -144,6 +155,20 @@ export function TerminalView({ id }: { id: string }) {
       }
       return true;
     });
+
+    // ---- 选择模式：捕获阶段把鼠标事件伪装成 Shift，让 xterm 在 TUI 鼠标模式下也做本地选中 ----
+    const forceShift = (e: MouseEvent) => {
+      if (selModeRef.current && !e.shiftKey) {
+        try {
+          Object.defineProperty(e, 'shiftKey', { configurable: true, get: () => true });
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    host.addEventListener('mousedown', forceShift, true);
+    host.addEventListener('mousemove', forceShift, true);
+    host.addEventListener('mouseup', forceShift, true);
 
     // ---- 右键即粘贴（有选区时右键则复制该选区），屏蔽浏览器默认菜单 ----
     const onContextMenu = (e: MouseEvent) => {
@@ -239,6 +264,9 @@ export function TerminalView({ id }: { id: string }) {
       disposed = true;
       ro.disconnect();
       host.removeEventListener('contextmenu', onContextMenu);
+      host.removeEventListener('mousedown', forceShift, true);
+      host.removeEventListener('mousemove', forceShift, true);
+      host.removeEventListener('mouseup', forceShift, true);
       if (selTimer) clearTimeout(selTimer);
       if (heartbeat) clearInterval(heartbeat);
       if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -252,14 +280,23 @@ export function TerminalView({ id }: { id: string }) {
   }, [id]);
 
   return (
-    <div className="term-host">
-      <button
-        className="term-copy"
-        onClick={copyAll}
-        title="复制（有选区复制选区，否则复制全部）"
-      >
-        {copied ? '✓ 已复制' : '⧉ 复制'}
-      </button>
+    <div className={`term-host ${selMode ? 'sel-mode' : ''}`}>
+      <div className="term-tools">
+        <button
+          className={`term-tool ${selMode ? 'on' : ''}`}
+          onClick={toggleSelMode}
+          title="选择模式：开启后可直接拖选复制（关闭时鼠标交给 CC）"
+        >
+          {selMode ? '✏ 选择中' : '✏ 选择'}
+        </button>
+        <button
+          className="term-tool"
+          onClick={copyAll}
+          title="复制（有选区复制选区，否则复制全部）"
+        >
+          {copied ? '✓ 已复制' : '⧉ 复制'}
+        </button>
+      </div>
       <div ref={hostRef} className="term" />
     </div>
   );
