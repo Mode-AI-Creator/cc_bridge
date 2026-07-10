@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { stripMouse, newStripState } from '../lib/termFilter';
+
+// 关闭当前鼠标追踪模式（切到“可选择”时立刻生效，不等应用重绘）
+const DISABLE_MOUSE = '\x1b[?1000l\x1b[?1001l\x1b[?1002l\x1b[?1003l';
 
 /** 写剪贴板：navigator.clipboard 不可用（局域网 IP / 非安全上下文）时回退 execCommand。 */
 function copyText(text: string) {
@@ -61,16 +65,20 @@ export function TerminalView({ id }: { id: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const [copied, setCopied] = useState(false);
-  // 选择模式：开启后普通拖拽即可选中复制（底层把鼠标事件伪装成 Shift，绕开 TUI 鼠标模式）
+  // 可选择模式（默认开）：剥离 PTY 流里的“启用鼠标追踪”序列，让普通拖拽即可选中复制。
+  // 关闭则把鼠标交还给 CC 的 TUI（滚动/点击）。
   const [selMode, setSelMode] = useState(
-    () => localStorage.getItem('ccbridge.selMode') === '1',
+    () => localStorage.getItem('ccbridge.selMode') !== '0',
   );
   const selModeRef = useRef(selMode);
   selModeRef.current = selMode;
+  (window as unknown as { __ccSelMode?: boolean }).__ccSelMode = selMode;
   const toggleSelMode = () =>
     setSelMode((v) => {
-      localStorage.setItem('ccbridge.selMode', v ? '0' : '1');
-      return !v;
+      const next = !v;
+      localStorage.setItem('ccbridge.selMode', next ? '1' : '0');
+      if (next) termRef.current?.write(DISABLE_MOUSE); // 立刻关掉当前鼠标模式
+      return next;
     });
 
   // 一键复制：有选区复制选区，否则复制整个终端缓冲（selectAll 绕开鼠标模式）
@@ -158,19 +166,6 @@ export function TerminalView({ id }: { id: string }) {
       return true;
     });
 
-    // ---- 选择模式：捕获阶段把鼠标事件伪装成 Shift，让 xterm 在 TUI 鼠标模式下也做本地选中 ----
-    const forceShift = (e: MouseEvent | PointerEvent) => {
-      if (selModeRef.current && !e.shiftKey) {
-        try {
-          Object.defineProperty(e, 'shiftKey', { configurable: true, get: () => true });
-        } catch {
-          /* ignore */
-        }
-      }
-    };
-    const forceEvents = ['mousedown', 'mousemove', 'mouseup', 'pointerdown', 'pointermove', 'pointerup'];
-    forceEvents.forEach((ev) => host.addEventListener(ev, forceShift as EventListener, true));
-
     // ---- 右键即粘贴（有选区时右键则复制该选区），屏蔽浏览器默认菜单 ----
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault();
@@ -192,6 +187,7 @@ export function TerminalView({ id }: { id: string }) {
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let backoff = RECONNECT_MIN;
+    let strip = newStripState();
     let everConnected = false;
 
     const encoder = new TextEncoder();
@@ -219,10 +215,12 @@ export function TerminalView({ id }: { id: string }) {
       ws = new WebSocket(url);
       ws.binaryType = 'arraybuffer';
 
+      strip = newStripState();
       ws.onopen = () => {
         backoff = RECONNECT_MIN;
         if (everConnected) term.write('\r\n\x1b[2m[ccbridge] 已重连\x1b[0m\r\n');
         everConnected = true;
+        if (selModeRef.current) term.write(DISABLE_MOUSE); // 复位残留鼠标模式
         sendResize();
         term.focus();
         // 应用层心跳：定期发送控制消息，避免空闲连接被代理/OS 掐断
@@ -231,8 +229,13 @@ export function TerminalView({ id }: { id: string }) {
       };
 
       ws.onmessage = (e) => {
-        if (typeof e.data === 'string') term.write(e.data);
-        else term.write(new Uint8Array(e.data));
+        if (typeof e.data === 'string') {
+          term.write(e.data);
+        } else {
+          let bytes = new Uint8Array(e.data);
+          if (selModeRef.current) bytes = stripMouse(bytes, strip);
+          term.write(bytes);
+        }
       };
 
       const scheduleReconnect = () => {
@@ -265,7 +268,6 @@ export function TerminalView({ id }: { id: string }) {
       disposed = true;
       ro.disconnect();
       host.removeEventListener('contextmenu', onContextMenu);
-      forceEvents.forEach((ev) => host.removeEventListener(ev, forceShift as EventListener, true));
       if (selTimer) clearTimeout(selTimer);
       if (heartbeat) clearInterval(heartbeat);
       if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -289,9 +291,13 @@ export function TerminalView({ id }: { id: string }) {
         <button
           className={`term-tool ${selMode ? 'on' : ''}`}
           onClick={toggleSelMode}
-          title="选择模式：开启后可直接拖选复制（关闭时鼠标交给 CC）"
+          title={
+            selMode
+              ? '可选择模式：直接拖选即可复制。点此把鼠标交还给 CC（滚动/点击）'
+              : '当前鼠标归 CC。点此开启可选择模式，直接拖选复制'
+          }
         >
-          {selMode ? '✏ 选择中' : '✏ 选择'}
+          {selMode ? '✏ 可选择' : '🖱 鼠标给CC'}
         </button>
         <button
           className="term-tool"
