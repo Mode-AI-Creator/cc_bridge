@@ -102,6 +102,8 @@ export function TerminalView({ id }: { id: string }) {
       scrollback: 8000,
       allowProposedApi: true,
     });
+    // 调试入口：控制台可 window.__ccterm.getSelection() 等
+    (window as unknown as { __ccterm: XTerm }).__ccterm = term;
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
@@ -157,7 +159,7 @@ export function TerminalView({ id }: { id: string }) {
     });
 
     // ---- 选择模式：捕获阶段把鼠标事件伪装成 Shift，让 xterm 在 TUI 鼠标模式下也做本地选中 ----
-    const forceShift = (e: MouseEvent) => {
+    const forceShift = (e: MouseEvent | PointerEvent) => {
       if (selModeRef.current && !e.shiftKey) {
         try {
           Object.defineProperty(e, 'shiftKey', { configurable: true, get: () => true });
@@ -166,9 +168,8 @@ export function TerminalView({ id }: { id: string }) {
         }
       }
     };
-    host.addEventListener('mousedown', forceShift, true);
-    host.addEventListener('mousemove', forceShift, true);
-    host.addEventListener('mouseup', forceShift, true);
+    const forceEvents = ['mousedown', 'mousemove', 'mouseup', 'pointerdown', 'pointermove', 'pointerup'];
+    forceEvents.forEach((ev) => host.addEventListener(ev, forceShift as EventListener, true));
 
     // ---- 右键即粘贴（有选区时右键则复制该选区），屏蔽浏览器默认菜单 ----
     const onContextMenu = (e: MouseEvent) => {
@@ -264,9 +265,7 @@ export function TerminalView({ id }: { id: string }) {
       disposed = true;
       ro.disconnect();
       host.removeEventListener('contextmenu', onContextMenu);
-      host.removeEventListener('mousedown', forceShift, true);
-      host.removeEventListener('mousemove', forceShift, true);
-      host.removeEventListener('mouseup', forceShift, true);
+      forceEvents.forEach((ev) => host.removeEventListener(ev, forceShift as EventListener, true));
       if (selTimer) clearTimeout(selTimer);
       if (heartbeat) clearInterval(heartbeat);
       if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -275,6 +274,11 @@ export function TerminalView({ id }: { id: string }) {
         ws.close();
       }
       termRef.current = null;
+      try {
+        delete (window as unknown as { __ccterm?: XTerm }).__ccterm;
+      } catch {
+        /* ignore */
+      }
       term.dispose();
     };
   }, [id]);
