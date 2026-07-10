@@ -57,36 +57,85 @@ export function TerminalView({ id }: { id: string }) {
       /* ignore */
     }
 
-    // ---- 复制 / 粘贴（跨平台：Win/Linux 用 Ctrl，mac 用 Cmd）----
+    // ---- 剪贴板：navigator.clipboard 不可用时（局域网 IP / 非安全上下文）回退 execCommand ----
+    const writeClipboard = (text: string) => {
+      if (!text) return;
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).catch(() => execCopyFallback(text));
+      } else {
+        execCopyFallback(text);
+      }
+    };
+    const execCopyFallback = (text: string) => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch {
+        /* ignore */
+      }
+    };
+    const pasteFromClipboard = () => {
+      navigator.clipboard
+        ?.readText()
+        .then((t) => t && term.paste(t))
+        .catch(() => {});
+    };
+
+    // ---- 选中即复制（经典终端行为，绕开鼠标模式/快捷键歧义）----
+    let selTimer: ReturnType<typeof setTimeout> | null = null;
+    term.onSelectionChange(() => {
+      if (selTimer) clearTimeout(selTimer);
+      selTimer = setTimeout(() => {
+        const sel = term.getSelection();
+        if (sel) writeClipboard(sel);
+      }, 40);
+    });
+
+    // ---- 复制 / 粘贴快捷键（跨平台：Win/Linux 用 Ctrl，mac 用 Cmd）----
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
-      // 复制：有选区时 Ctrl/Cmd+C 复制（否则放行给 shell 当 SIGINT）；Ctrl/Cmd+Shift+C 强制复制
+      // 复制：有选区时 Ctrl/Cmd+C 复制（否则放行给 shell 当 SIGINT）；Shift 强制复制
       if (mod && key === 'c') {
         const sel = term.getSelection();
-        const forceCopy = e.shiftKey || e.metaKey;
-        if (sel && (forceCopy || !e.metaKey)) {
-          navigator.clipboard?.writeText(sel).catch(() => {});
+        if (sel && (e.shiftKey || e.metaKey || !e.metaKey)) {
+          writeClipboard(sel);
           term.clearSelection();
           return false;
         }
-        // Cmd+C 无选区：吞掉（mac 上不该发 SIGINT）
-        if (e.metaKey) return false;
+        if (e.metaKey) return false; // Cmd+C 无选区：吞掉，不发 SIGINT
         return true; // Ctrl+C 无选区 → 交给 shell 当中断
       }
 
-      // 粘贴：Ctrl/Cmd+V 或 Ctrl/Cmd+Shift+V
+      // 粘贴：Ctrl/Cmd+V
       if (mod && key === 'v') {
-        navigator.clipboard
-          ?.readText()
-          .then((t) => t && term.paste(t))
-          .catch(() => {});
+        pasteFromClipboard();
         return false;
       }
       return true;
     });
+
+    // ---- 右键即粘贴（有选区时右键则复制该选区），屏蔽浏览器默认菜单 ----
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      const sel = term.getSelection();
+      if (sel) {
+        writeClipboard(sel);
+        term.clearSelection();
+      } else {
+        pasteFromClipboard();
+      }
+    };
+    host.addEventListener('contextmenu', onContextMenu);
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const url = `${proto}://${location.host}/api/pty/${id}`;
@@ -168,6 +217,8 @@ export function TerminalView({ id }: { id: string }) {
     return () => {
       disposed = true;
       ro.disconnect();
+      host.removeEventListener('contextmenu', onContextMenu);
+      if (selTimer) clearTimeout(selTimer);
       if (heartbeat) clearInterval(heartbeat);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (ws) {
