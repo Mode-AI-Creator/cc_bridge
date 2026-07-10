@@ -40,13 +40,4 @@ describe('stripMouse', () => {
     expect(dec(stripMouse(enc('c'), s))).toBe('\x1bc'); // 非匹配 → ESC 原样吐出
   });
 
-  it('sets stripped flag only when a mouse-enable was removed', () => {
-    const s1 = newStripState();
-    stripMouse(enc('plain text no mouse'), s1);
-    expect(s1.stripped).toBe(false);
-
-    const s2 = newStripState();
-    stripMouse(enc('x\x1b[?1002hy'), s2);
-    expect(s2.stripped).toBe(true);
-  });
 });

@@ -125,7 +125,7 @@ async fn post_hook(State(s): State<AppState>, Json(req): Json<HookReq>) -> impl 
     s.store
         .write()
         .unwrap()
-        .record_hook(&req.session_id, status, req.tool.clone());
+        .record_hook(&req.session_id, status);
 
     let msg = serde_json::json!({
         "type": "hook",

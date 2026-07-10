@@ -33,13 +33,8 @@ function patByteOk(pos: number, b: number): boolean {
 
 export interface StripState {
   carry: Uint8Array;
-  /** 是否曾剥离过鼠标追踪启用序列（表示应用想要鼠标 → 滚轮应转发给它）。 */
-  stripped: boolean;
 }
-export const newStripState = (): StripState => ({
-  carry: new Uint8Array(0),
-  stripped: false,
-});
+export const newStripState = (): StripState => ({ carry: new Uint8Array(0) });
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   if (a.length === 0) return b;
@@ -66,7 +61,6 @@ export function stripMouse(input: Uint8Array, state: StripState): Uint8Array {
       while (i + k < n && k < PAT_LEN && patByteOk(k, buf[i + k])) k++;
       if (k === PAT_LEN) {
         i += PAT_LEN; // 完整命中 → 丢弃
-        state.stripped = true;
         continue;
       }
       if (i + k === n) {

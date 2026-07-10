@@ -7,13 +7,11 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// 由 hook 上报的会话实时事实（Phase 3）。
+/// 由 hook 上报的会话实时事实（Phase 3）。工具名在 WS 广播里携带，无需在此存储。
 #[derive(Debug, Clone)]
 pub struct HookFact {
     pub status: SessionStatus,
     pub ts: i64, // epoch 秒
-    #[allow(dead_code)] // Phase 5 动作流视图消费
-    pub tool: Option<String>, // 当前/最近工具名
 }
 
 pub struct Store {
@@ -71,13 +69,12 @@ impl Store {
     }
 
     /// 记录一条 hook 事实（覆盖该会话的上一条）。
-    pub fn record_hook(&mut self, session_id: &str, status: SessionStatus, tool: Option<String>) {
+    pub fn record_hook(&mut self, session_id: &str, status: SessionStatus) {
         self.hooks.insert(
             session_id.to_string(),
             HookFact {
                 status,
                 ts: Utc::now().timestamp(),
-                tool,
             },
         );
     }
@@ -304,7 +301,7 @@ mod tests {
         assert_eq!(before[0].status, SessionStatus::Idle);
 
         // 收到 PreToolUse hook → working（覆盖时间判断）
-        store.record_hook("s1", SessionStatus::Working, Some("Bash".into()));
+        store.record_hook("s1", SessionStatus::Working);
         let after = store.summaries();
         assert_eq!(after[0].status, SessionStatus::Working);
 
@@ -315,7 +312,7 @@ mod tests {
     #[test]
     fn hook_for_unknown_session_is_harmless() {
         let mut store = Store::new();
-        store.record_hook("ghost", SessionStatus::Working, None);
+        store.record_hook("ghost", SessionStatus::Working);
         assert_eq!(store.summaries().len(), 0);
         assert_eq!(store.stats().total_sessions, 0);
     }

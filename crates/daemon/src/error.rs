@@ -26,7 +26,6 @@ impl ApiError {
     pub fn bad_request(msg: impl Into<String>) -> Self {
         Self::new(StatusCode::BAD_REQUEST, msg)
     }
-    #[allow(dead_code)] // Phase 6 mailbox handlers 使用
     pub fn not_found(msg: impl Into<String>) -> Self {
         Self::new(StatusCode::NOT_FOUND, msg)
     }
@@ -59,7 +58,6 @@ impl From<anyhow::Error> for ApiError {
 }
 
 /// handler 返回类型：`Ok` 走正常响应，`Err(ApiError)` 走统一错误体。
-#[allow(dead_code)] // Phase 6 mailbox handlers 使用
 pub type ApiResult<T> = Result<T, ApiError>;
 
 #[cfg(test)]
