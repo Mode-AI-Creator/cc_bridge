@@ -158,11 +158,7 @@ export function TerminalView({ id }: { id: string }) {
         return true; // Ctrl+C 无选区 → 交给 shell 当中断
       }
 
-      // 粘贴：Ctrl/Cmd+V
-      if (mod && key === 'v') {
-        pasteFromClipboard();
-        return false;
-      }
+      // 粘贴：Ctrl/Cmd+V 交给 xterm 原生 paste 事件处理（避免与自定义读取重复粘贴）
       return true;
     });
 

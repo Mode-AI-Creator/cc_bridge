@@ -24,6 +24,30 @@ import { type ActionEvent, pushAction } from './lib/actions';
 // 记住上次新建会话的目录（跨平台，空则从驱动器/根开始浏览）
 const loadLastCwd = () => localStorage.getItem('ccbridge.lastCwd') || '';
 
+const cwdBasename = (p: string) =>
+  p.replace(/\\/g, '/').split('/').filter(Boolean).pop() || p;
+
+// 把托管(新建)会话合成为一条 active 摘要，让它在写出 JSONL 前就出现在看板
+function synthHosted(m: ManagedInfo): SessionSummary {
+  return {
+    id: m.id,
+    project_path: m.cwd,
+    project_name: cwdBasename(m.cwd),
+    title: m.title || cwdBasename(m.cwd),
+    model: null,
+    status: 'working',
+    started_at: null,
+    last_active_at: null,
+    last_active_epoch: m.created_at || Math.floor(Date.now() / 1000),
+    had_error: false,
+    message_count: 0,
+    tool_count: 0,
+    usage: { input: 0, output: 0, cache_creation: 0, cache_read: 0, cost_usd: 0 },
+    git_branch: null,
+    file: `hosted:${m.id}`,
+  };
+}
+
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 // 拖拽期间禁用选中/改光标；结束（松手或失焦）时**务必**恢复，避免整页卡在不可选中
@@ -150,24 +174,45 @@ export function App() {
       return next;
     });
 
-  // 三态计数
+  // 托管(新建)会话合成的 active 行：未 resume（无 sessionId 关联）且同 cwd 尚无 active 的真实会话
+  const hostedActive = useMemo(() => {
+    const activeCwds = new Set(
+      sessions
+        .filter((s) => bucketOf(s, overrides) === 'active')
+        .map((s) => s.project_path),
+    );
+    return managed
+      .filter((m) => {
+        const chat = chats.find((c) => c.id === m.id);
+        if (chat?.sessionId) return false; // resume 的用真实 JSONL 行
+        if (activeCwds.has(m.cwd)) return false; // 同 cwd 已有 active 真实会话
+        return true;
+      })
+      .map(synthHosted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [managed, chats, sessions, overrides]);
+
+  // 三态计数（active 含托管新建会话）
   const counts = useMemo(() => {
     const c: Record<Bucket, number> = { active: 0, inactive: 0, history: 0 };
     for (const s of sessions) c[bucketOf(s, overrides)]++;
+    c.active += hostedActive.length;
     return c;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, overrides]);
+  }, [sessions, overrides, hostedActive]);
 
-  // 中间列表：有搜索词 → 跨全部会话；否则 → 当前 tab 的会话
+  // 中间列表：有搜索词 → 跨全部会话；否则 → 当前 tab 的会话（active tab 追加托管新建会话）
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return sessions.filter((s) => {
+    const base = sessions.filter((s) => {
       if (activeProject && s.project_path !== activeProject) return false;
       if (q) return matchesQuery(s, q, renames);
       return bucketOf(s, overrides) === tab;
     });
+    if (!q && tab === 'active') return [...hostedActive, ...base];
+    return base;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, query, activeProject, renames, overrides, tab]);
+  }, [sessions, query, activeProject, renames, overrides, tab, hostedActive]);
 
   const selectedSession = sessions.find((s) => s.id === selectedId) || null;
 
@@ -229,6 +274,13 @@ export function App() {
 
   // 点击列表会话：切换详情 + 若该会话有进行中的对话则切到其终端，否则显示历史/继续
   const selectSession = (id: string) => {
+    // 托管(新建)合成行：直接打开/聚焦其终端
+    const m = managed.find((x) => x.id === id);
+    if (m) {
+      openManaged(m);
+      setSelectedId(id);
+      return;
+    }
     setSelectedId(id);
     const c = chats.find((x) => x.sessionId === id);
     setActiveChatId(c ? c.id : null);

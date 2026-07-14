@@ -119,6 +119,8 @@ impl Store {
     }
 
     /// 会话摘要列表，按最近活动倒序；status 用当前时间即时重算。
+    /// 去重：同一 sessionId（CC 的唯一指纹）若被拆到多个 JSONL 文件，只保留最近活动的一条；
+    /// id 为空的条目不去重（各自按文件保留）。
     pub fn summaries(&self) -> Vec<SessionSummary> {
         let mut out: Vec<SessionSummary> = self
             .sessions
@@ -130,6 +132,8 @@ impl Store {
             })
             .collect();
         out.sort_by_key(|s| std::cmp::Reverse(s.last_active_epoch));
+        let mut seen = std::collections::HashSet::new();
+        out.retain(|s| s.id.is_empty() || seen.insert(s.id.clone()));
         out
     }
 
@@ -285,6 +289,30 @@ mod tests {
             recent_messages: vec![],
             ticks: vec![],
         }
+    }
+
+    #[test]
+    fn summaries_dedup_same_session_id_across_files() {
+        let mut store = Store::new();
+        let now = Utc::now().timestamp();
+        // 同一 sessionId "dup" 出现在两个文件：旧的与新的
+        let mut older = fake_session("dup", now - 1000);
+        older.summary.file = "/tmp/a.jsonl".to_string();
+        let mut newer = fake_session("dup", now - 10);
+        newer.summary.file = "/tmp/b.jsonl".to_string();
+        store.sessions.insert("/tmp/a.jsonl".to_string(), older);
+        store.sessions.insert("/tmp/b.jsonl".to_string(), newer);
+        // 另一个不同 id 的会话
+        store
+            .sessions
+            .insert("/tmp/c.jsonl".to_string(), fake_session("other", now - 5));
+
+        let out = store.summaries();
+        // dup 只保留一条（最近活动的 b），other 保留 → 共 2 条
+        assert_eq!(out.len(), 2);
+        let dup: Vec<_> = out.iter().filter(|s| s.id == "dup").collect();
+        assert_eq!(dup.len(), 1);
+        assert_eq!(dup[0].file, "/tmp/b.jsonl"); // 保留最近活动的文件
     }
 
     #[test]
